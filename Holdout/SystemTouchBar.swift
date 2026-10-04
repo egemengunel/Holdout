@@ -12,6 +12,8 @@ import AppKit
 enum SystemTouchBar {
     /// Full width, covering the Control Strip. `0` keeps the Control Strip visible.
     static let fullWidthPlacement: Int64 = 1
+    /// Leaves the Control Strip visible on the right.
+    static let besideControlStripPlacement: Int64 = 0
 
     private static let dfr = dlopen("/System/Library/PrivateFrameworks/DFRFoundation.framework/DFRFoundation", RTLD_NOW)
 
@@ -58,6 +60,13 @@ enum SystemTouchBar {
         guard let present = classMethod(NSTouchBar.self, selector, as: Present.self) else { return false }
         present(NSTouchBar.self, selector, touchBar, placement, itemIdentifier.rawValue as NSString)
         return true
+    }
+
+    /// Whether the system draws its ✕ while Holdout is frontmost. It always draws one
+    /// beside the Control Strip when another app is frontmost.
+    static func showsSystemCloseBox(_ shows: Bool) {
+        typealias ShowsCloseBox = @convention(c) (Bool) -> Void
+        dfrFunction("DFRSystemModalShowsCloseBoxWhenFrontMost", as: ShowsCloseBox.self)?(shows)
     }
 
     static func minimize(_ touchBar: NSTouchBar) {
