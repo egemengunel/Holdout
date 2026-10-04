@@ -13,7 +13,7 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
 
         var symbol: String {
             switch self {
-            case .agents: "sparkles"
+            case .agents: "apple.terminal.on.rectangle"
             case .sim: "iphone"
             case .project: "hammer"
             case .mac: "memorychip"
@@ -47,6 +47,9 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
     private let content = FlexibleWidthView(minWidth: contentMinWidth, height: contentHeight)
     private let agentsView = AgentsStripView()
     private let simView = SimulatorStripView()
+    private let projectView = ProjectStripView()
+    private let builds = XcodeBuildWatcher()
+    private let feeds = ProjectFeedStore()
     private let comingSoonLabel = NSTextField(labelWithString: "Coming next")
     /// Stack views center their content vertically; a bare label would sit at the top.
     private lazy var comingSoon = NSStackView(views: [comingSoonLabel])
@@ -56,6 +59,9 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
     private var wasWaiting = false
     private var ticker: Timer?
     private var visibilityObservation: NSKeyValueObservation?
+    /// Failures up to this moment have been seen (in the Project tab), so they stop blinking red.
+    /// Starts at launch, so an old failure doesn't alarm when Holdout starts.
+    private var failuresSeenUntil = Date.now.timeIntervalSince1970
     private var pulse = IconPulse.idle
     private var animation: Timer?
 
@@ -103,9 +109,15 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
             tabs.setWidth(Self.tabWidth, forSegment: segment)
         }
         agentsView.onSelect = { [weak self] session in self?.focus(session) }
+        projectView.onCommand = { [weak self] action in self?.send(action) }
         comingSoonLabel.textColor = .secondaryLabelColor
         sessions.onChange = { [weak self] in self?.refresh() }
         sessions.start()
+        builds.onChange = { [weak self] in self?.refresh() }
+        builds.start()
+        feeds.onChange = { [weak self] in self?.refresh() }
+        feeds.isLive = { [weak self] id in self?.sessions.sessions.contains { $0.id == id } ?? true }
+        feeds.start()
 
         // Elapsed times tick, and finished sessions drop off after a minute.
         ticker = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
@@ -117,7 +129,9 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
     // MARK: - Presenting
 
     @objc func openStrip() {
-        if sessions.visible().contains(where: { $0.state == .waiting }) {
+        if latestFailure != nil {
+            tab = .project
+        } else if sessions.visible().contains(where: { $0.state == .waiting }) {
             tab = .agents
         }
         tabs.selectedSegment = tab.rawValue
@@ -142,7 +156,8 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         let view: NSView = switch tab {
         case .agents: agentsView
         case .sim: simView
-        case .project, .mac: comingSoon
+        case .project: projectView
+        case .mac: comingSoon
         }
         if tab == .sim {
             simView.reload()
@@ -169,7 +184,8 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         let working = visible.filter { $0.state.isWorking }.count
 
         let lastFinished = visible.filter { $0.state == .done }.map(\.updatedAt).max()
-        setPulse(waiting ? .waiting : working > 0 ? .working : lastFinished.map { .done(at: $0) } ?? .idle)
+        let failed = latestFailure != nil
+        setPulse(failed ? .alert : waiting ? .waiting : working > 0 ? .working : lastFinished.map { .done(at: $0) } ?? .idle)
         stripButton.title = !waiting && working > 0 ? "\(working)" : ""
         stripButton.imagePosition = stripButton.title.isEmpty ? .imageOnly : .imageLeading
 
@@ -182,6 +198,40 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         if isPresented && tab == .agents {
             agentsView.update(visible)
         }
+        if isPresented && tab == .project {
+            failuresSeenUntil = Date.now.timeIntervalSince1970
+            projectView.update(build: builds.latest, feed: currentFeed)
+        }
+    }
+
+    /// The mods' view of the session you touched most recently. Sessions that have ended
+    /// (their hook file is gone) don't count, even if their feed file is still on disk.
+    private var currentFeed: ProjectFeed? {
+        sessions.sessions
+            .sorted { $0.updatedAt > $1.updatedAt }
+            .lazy
+            .compactMap { self.feeds.feeds[$0.id] }
+            .first { $0.hasContent }
+    }
+
+    /// Hands a Touch Bar button press to the holdout-bridge mod in the current session,
+    /// which submits it as a prompt, then brings that session forward.
+    private func send(_ action: ProjectStripView.Action) {
+        guard let feed = currentFeed else { return }
+        let command = ["id": UUID().uuidString, "action": action.rawValue]
+        let url = URL.applicationSupportDirectory.appending(path: "Holdout/commands/\(feed.session).json")
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? JSONEncoder().encode(command).write(to: url, options: .atomic)
+        if let session = sessions.sessions.first(where: { $0.id == feed.session }) {
+            focus(session)
+        }
+    }
+
+    /// When the newest unseen failed build (Xcode's own, or one Claude ran through ios-dock) finished.
+    private var latestFailure: TimeInterval? {
+        let xcode = builds.latest.flatMap { $0.succeeded ? nil : $0.finishedAt.timeIntervalSince1970 }
+        let claude = currentFeed.flatMap { $0.build?.isOk == false ? $0.updatedAt : nil }
+        return [xcode, claude].compactMap { $0 }.filter { $0 > failuresSeenUntil }.max()
     }
 
     // MARK: - Icon animation
@@ -202,6 +252,8 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         let color = pulse.color(at: now, reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
         stripButton.bezelColor = color
         setSymbol(pulse.symbol(at: now))
+        let opacity = pulse.symbolOpacity(at: now)
+        stripButton.contentTintColor = opacity < 1 ? NSColor.labelColor.withAlphaComponent(opacity) : nil
         if color == nil {
             animation?.invalidate()
             animation = nil
@@ -213,7 +265,11 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
     private func setSymbol(_ name: String) {
         guard name != currentSymbol else { return }
         currentSymbol = name
-        stripButton.image = NSImage(systemSymbolName: name, accessibilityDescription: "Holdout")
+        let image = NSImage(systemSymbolName: name, accessibilityDescription: "Holdout")
+        // The bare checkmark reads thin next to the filled symbols.
+        stripButton.image = name == "checkmark"
+            ? image?.withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: NSFont.systemFontSize, weight: .medium))
+            : image
     }
 
     /// Debug aid: the content view tree with frames.

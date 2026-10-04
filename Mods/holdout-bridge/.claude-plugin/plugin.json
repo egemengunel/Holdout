@@ -1,0 +1,6 @@
+{
+  "name": "holdout-bridge",
+  "version": "0.1.0",
+  "description": "Mirrors ios-dock and swift-design-lint state into a file Holdout.app shows on the Touch Bar",
+  "author": { "name": "Egemen Günel" }
+}

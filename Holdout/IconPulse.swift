@@ -8,7 +8,8 @@ import AppKit
 /// How the Control Strip icon signals status: the color says what, the motion says how urgent.
 enum IconPulse: Equatable {
     case idle
-    /// Green glow that fades out after a session finishes.
+    /// Green check that flashes quickly a few times after a session finishes, glows down,
+    /// then cross-fades back to the hand.
     case done(at: TimeInterval)
     /// Blue, slow breathing.
     case working
@@ -23,14 +24,28 @@ enum IconPulse: Equatable {
     func symbol(at now: TimeInterval) -> String {
         switch self {
         case .idle: Self.idleSymbol
-        case let .done(finishedAt): now - finishedAt < Self.doneFade ? "checkmark" : Self.idleSymbol
+        case let .done(finishedAt): now - finishedAt < Self.symbolSwap ? "checkmark" : Self.idleSymbol
         case .working: "apple.terminal.on.rectangle.fill"
         case .waiting: "hand.tap.fill"
         case .alert: "exclamationmark.triangle.fill"
         }
     }
 
-    private static let doneFade: TimeInterval = 6
+    private static let doneFlashes = 3.0
+    private static let doneFlashPeriod: TimeInterval = 0.5
+    private static let doneFlashing = doneFlashes * doneFlashPeriod
+    private static let doneGlowDown: TimeInterval = 1.5
+    private static let doneFade = doneFlashing + doneGlowDown
+    /// The check fades out and the hand fades in around this moment, over `symbolCrossfade`.
+    private static let symbolCrossfade: TimeInterval = 0.5
+    private static let symbolSwap = doneFade - symbolCrossfade / 2
+
+    /// 0…1 opacity for the symbol, dipping to 0 at the moment the done check becomes the hand.
+    func symbolOpacity(at now: TimeInterval) -> Double {
+        guard case let .done(finishedAt) = self else { return 1 }
+        let distance = abs(now - finishedAt - Self.symbolSwap) / (Self.symbolCrossfade / 2)
+        return min(1, distance)
+    }
     /// Roughly the Touch Bar's default button gray, so the pulse dims toward a resting button.
     private static let resting = NSColor(srgbRed: 0.23, green: 0.23, blue: 0.24, alpha: 1)
 
@@ -42,10 +57,19 @@ enum IconPulse: Equatable {
         case .idle:
             return nil
         case let .done(finishedAt):
-            let progress = (now - finishedAt) / Self.doneFade
-            guard progress < 1 else { return nil }
+            let elapsed = now - finishedAt
+            guard elapsed < Self.doneFade else { return nil }
             base = .systemGreen
-            intensity = 1 - progress
+            if reduceMotion {
+                intensity = 1
+            } else if elapsed < Self.doneFlashing {
+                // Starts bright: the wave is shifted half a period so each flash peaks first.
+                intensity = Self.breathe(elapsed + Self.doneFlashPeriod / 2, period: Self.doneFlashPeriod, floor: 0.1)
+            } else {
+                // The last flash ends at full brightness; ease it down from there.
+                let progress = (elapsed - Self.doneFlashing) / Self.doneGlowDown
+                intensity = 1 - progress * progress * (3 - 2 * progress)
+            }
         case .working:
             base = .systemBlue
             intensity = reduceMotion ? 1 : Self.breathe(now, period: 2.4, floor: 0.35)

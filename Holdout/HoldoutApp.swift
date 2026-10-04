@@ -14,11 +14,21 @@ struct HoldoutApp: App {
     var body: some Scene {
         // Holdout is a background app (LSUIElement): no Dock icon and no window, so it's
         // almost never frontmost and the system always draws the strip's native ✕.
-        MenuBarExtra("Holdout", systemImage: "hand.raised.fill") {
+        MenuBarExtra {
             Button("Quit Holdout") { NSApp.terminate(nil) }
                 .keyboardShortcut("q")
+        } label: {
+            Image(nsImage: Self.menuBarIcon)
         }
     }
+
+    /// `systemImage:` draws the symbol smaller than other menu bar items; this matches their size.
+    private static let menuBarIcon: NSImage = {
+        let image = NSImage(systemSymbolName: "hand.raised.fill", accessibilityDescription: "Holdout")!
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 16, weight: .regular))!
+        image.isTemplate = true
+        return image
+    }()
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
