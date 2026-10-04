@@ -58,18 +58,19 @@ final class MacStripView: NSView {
         var culprits: [ProcessUsage] = []
 
         for alert in snapshot.alerts {
+            let bezel = alert.severity == .distress ? Self.criticalBezel : Self.warningBezel
             switch alert {
+            case let .thrashing(rate):
+                let chip = chip(symbol: "memorychip", tint: .white, title: "Memory thrashing", detail: "\(Self.megabytes(rate))/s from swap")
+                chip.bezelColor = bezel
+                views.append(chip)
             case let .pressure(level, since):
                 let chip = chip(symbol: "memorychip", tint: .white, title: level == .critical ? "Memory critical" : "Memory pressure high", detail: Self.duration(since: since, now: now))
-                chip.bezelColor = level == .critical ? Self.criticalBezel : Self.warningBezel
-                views.append(chip)
-            case let .swapSurge(bytes):
-                let chip = chip(symbol: "arrow.up.right", tint: .white, title: "Swap +\(Self.gigabytes(bytes))", detail: "in 5 min")
-                chip.bezelColor = Self.warningBezel
+                chip.bezelColor = bezel
                 views.append(chip)
             case let .hog(usage, since):
                 culprits.append(usage)
-                views.append(processChip(usage, detail: "\(Int(usage.cpu))% CPU · \(Self.duration(since: since, now: now))", bezel: Self.criticalBezel, now: now))
+                views.append(processChip(usage, detail: "\(Int(usage.cpu))% CPU · \(Self.duration(since: since, now: now))", bezel: bezel, now: now))
             }
         }
 
@@ -159,6 +160,10 @@ final class MacStripView: NSView {
 
     private static func gigabytes(_ bytes: UInt64, decimals: Int = 1) -> String {
         String(format: "%.\(decimals)f GB", Double(bytes) / 1_073_741_824)
+    }
+
+    private static func megabytes(_ bytes: UInt64) -> String {
+        "\(bytes / 1_048_576) MB"
     }
 
     private static func duration(since: TimeInterval, now: Date) -> String {

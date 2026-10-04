@@ -5,24 +5,31 @@
 
 import Foundation
 
-/// Samples the Mac every few seconds and raises alerts only for sustained trouble.
+/// Samples the Mac every few seconds and raises alerts only for trouble you'd feel.
+/// Swap size and growth are shown but never alert: low-RAM Macs run fine with 10+ GB of swap.
 /// Every threshold is generic, so it behaves the same on any Mac; nothing is tuned
 /// to one machine's usual swap or to particular processes.
 final class MacMonitor {
     private static let interval: TimeInterval = 5
-    /// Warning pressure must last this long; macOS hits it briefly all the time on 8 GB.
-    private static let warningSustain: TimeInterval = 120
-    private static let criticalSustain: TimeInterval = 30
+    /// "Warning" pressure alone isn't an alert: low-RAM Macs sit there for hours running
+    /// fine. Critical has to hold this long.
+    private static let criticalSustain: TimeInterval = 60
+    /// Swap-in averaged over a minute. A Mac that feels fine reads back well under 1 MB/s.
+    private static let thrashRate: UInt64 = 20 * 1024 * 1024
+    private static let thrashWindow: TimeInterval = 60
+    /// A heads-up of the same kind flashes at most this often.
+    private static let headsUpCooldown: TimeInterval = 30 * 60
     private static let swapWindow: TimeInterval = 5 * 60
-    private static let swapSurge: UInt64 = 1536 * 1024 * 1024
     /// Percent of one core, held for `hogSustain`.
     private static let hogCPU: Double = 80
     private static let hogSustain: TimeInterval = 3 * 60
 
     var onChange: (() -> Void)?
     private(set) var snapshot: MacSnapshot?
-    /// When the newest active alert started; nil while all is well.
-    private(set) var newestAlert: TimeInterval?
+    /// When the newest active distress alert started; nil while all is well.
+    private(set) var newestDistress: TimeInterval?
+    /// The latest heads-up to flash: when, and its symbol.
+    private(set) var headsUp: (at: TimeInterval, symbol: String)?
 
     private var timer: Timer?
     private var names: [pid_t: String] = [:]
@@ -33,6 +40,8 @@ final class MacMonitor {
     private var elevatedSince: TimeInterval?
     private var hotSince: [String: TimeInterval] = [:]
     private var alertStarts: [String: TimeInterval] = [:]
+    private var swapInHistory: [(at: TimeInterval, total: UInt64)] = []
+    private var lastAnnounced: [String: TimeInterval] = [:]
 
     func start() {
         sample()
@@ -45,6 +54,12 @@ final class MacMonitor {
         let now = Date.now.timeIntervalSince1970
         let pressure = SystemSampler.pressure()
         let swap = SystemSampler.swapUsed()
+        swapInHistory.append((now, SystemSampler.swappedIn()))
+        swapInHistory.removeAll { now - $0.at > Self.thrashWindow * 2 }
+        let thrashStart = swapInHistory.last { now - $0.at >= Self.thrashWindow }
+        let swapInRate = thrashStart.map { start in
+            UInt64(Double(swapInHistory[swapInHistory.count - 1].total &- start.total) / (now - start.at))
+        } ?? 0
         let ticks = SystemSampler.cpuTicks()
         let usages = processUsages(now: now)
 
@@ -70,14 +85,11 @@ final class MacMonitor {
         hotSince = hotSince.filter { name, _ in usages.contains { $0.name == name } }
 
         var alerts: [MacAlert] = []
-        if let since = elevatedSince {
-            let sustain = pressure == .critical ? Self.criticalSustain : Self.warningSustain
-            if now - since >= sustain {
-                alerts.append(.pressure(pressure, since: since))
-            }
+        if swapInRate >= Self.thrashRate {
+            alerts.append(.thrashing(bytesPerSecond: swapInRate))
         }
-        if swapGrowth > 0, UInt64(swapGrowth) >= Self.swapSurge {
-            alerts.append(.swapSurge(bytes: UInt64(swapGrowth)))
+        if pressure == .critical, let since = elevatedSince, now - since >= Self.criticalSustain {
+            alerts.append(.pressure(pressure, since: since))
         }
         for usage in usages.sorted(by: { $0.cpu > $1.cpu }) {
             if let since = hotSince[usage.name], now - since >= Self.hogSustain {
@@ -86,10 +98,15 @@ final class MacMonitor {
         }
 
         // An alert keeps the time it first appeared, so a new one can be told from an old one.
+        let started = alerts.filter { alertStarts[$0.key] == nil }
         alertStarts = alerts.reduce(into: [:]) { starts, alert in
             starts[alert.key] = alertStarts[alert.key] ?? now
         }
-        newestAlert = alertStarts.values.max()
+        newestDistress = alerts.filter { $0.severity == .distress }.compactMap { alertStarts[$0.key] }.max()
+        for alert in started where alert.severity == .headsUp && now - (lastAnnounced[alert.key] ?? 0) >= Self.headsUpCooldown {
+            lastAnnounced[alert.key] = now
+            headsUp = (now, alert.symbol)
+        }
 
         snapshot = MacSnapshot(
             pressure: pressure,
@@ -97,6 +114,7 @@ final class MacMonitor {
             memoryTotal: ProcessInfo.processInfo.physicalMemory,
             swapUsed: swap,
             swapGrowth: swapGrowth,
+            swapInRate: swapInRate,
             cpu: cpu,
             topMemory: Array(usages.sorted { $0.footprint > $1.footprint }.prefix(3)),
             alerts: alerts

@@ -179,13 +179,20 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         let waiting = visible.contains { $0.state == .waiting }
         let working = visible.filter { $0.state.isWorking }.count
 
+        // Only while its flash is still playing; done sessions stay listed far longer.
         let lastFinished = visible.filter { $0.state == .done }.map(\.updatedAt).max()
+            .flatMap { Date.now.timeIntervalSince1970 - $0 < IconPulse.doneDuration ? $0 : nil }
         let failed = latestFailure != nil || unseenMacAlert != nil
+        let headsUp = mac.headsUp.flatMap { Date.now.timeIntervalSince1970 - $0.at < IconPulse.headsUpDuration ? $0 : nil }
+        // A heads-up is brief, so it plays over working; a session waiting on you still wins.
         statusIcon.show(
-            failed ? .alert : waiting ? .waiting : working > 0 ? .working : lastFinished.map { .done(at: $0) } ?? .idle,
+            failed ? .alert
+                : waiting ? .waiting
+                : headsUp.map { .headsUp(at: $0.at, symbol: $0.symbol) }
+                ?? (working > 0 ? .working : lastFinished.map { .done(at: $0) } ?? .idle),
             reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         )
-        statusIcon.setCount(!failed && !waiting && working > 0 ? working : nil)
+        statusIcon.setCount(!failed && !waiting && headsUp == nil && working > 0 ? working : nil)
 
         // Xcode's debugger can take the Control Strip slot; something needing you takes it back.
         if waiting && !wasWaiting {
@@ -234,7 +241,7 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
 
     /// When the newest Mac alert started, if it began after you last looked at the Mac tab.
     private var unseenMacAlert: TimeInterval? {
-        mac.newestAlert.flatMap { $0 > macAlertsSeenUntil ? $0 : nil }
+        mac.newestDistress.flatMap { $0 > macAlertsSeenUntil ? $0 : nil }
     }
 
     /// When the newest unseen failed build (Xcode's own, or one Claude ran through ios-dock) finished.

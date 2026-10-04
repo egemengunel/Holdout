@@ -106,10 +106,10 @@ final class StatusIconView: NSView {
         guard let layer else { return }
 
         var elapsed: TimeInterval = 0
-        if case let .done(finishedAt) = next {
-            elapsed = Date.now.timeIntervalSince1970 - finishedAt
+        if let (startedAt, duration) = next.transient {
+            elapsed = Date.now.timeIntervalSince1970 - startedAt
             // Already over (e.g. Holdout started after it finished): just rest.
-            guard elapsed < IconPulse.doneDuration else {
+            guard elapsed < duration else {
                 show(.idle, reduceMotion: reduceMotion)
                 return
             }
@@ -119,13 +119,13 @@ final class StatusIconView: NSView {
                 self?.layer?.removeAllAnimations()
             }
             self.settle = settle
-            DispatchQueue.main.asyncAfter(deadline: .now() + IconPulse.doneDuration - elapsed - Self.crossfade / 2, execute: settle)
+            DispatchQueue.main.asyncAfter(deadline: .now() + duration - elapsed - Self.crossfade / 2, execute: settle)
         }
 
         setSymbol(next.symbol, animated: true)
         layer.removeAllAnimations()
         // The model value is what shows once an animation ends (done) or when motion is reduced.
-        if case .done = next {
+        if next.transient != nil {
             layer.backgroundColor = reduceMotion ? next.shade(1) : IconPulse.resting.cgColor
         } else {
             layer.backgroundColor = next.shade(1)

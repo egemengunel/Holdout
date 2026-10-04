@@ -38,8 +38,7 @@ enum SystemSampler {
         return usage.xsu_used
     }
 
-    /// Activity Monitor's "Memory Used": app memory, wired, and compressed.
-    static func memoryUsed() -> UInt64 {
+    private static func vmStatistics() -> vm_statistics64? {
         var stats = vm_statistics64()
         var count = mach_msg_type_number_t(MemoryLayout<vm_statistics64>.size / MemoryLayout<integer_t>.size)
         let result = withUnsafeMutablePointer(to: &stats) {
@@ -47,7 +46,18 @@ enum SystemSampler {
                 host_statistics64(host, HOST_VM_INFO64, $0, &count)
             }
         }
-        guard result == KERN_SUCCESS else { return 0 }
+        return result == KERN_SUCCESS ? stats : nil
+    }
+
+    /// Bytes read back from swap since boot. Its rate is what you feel as slowness:
+    /// the Mac waiting on disk for memory it parked there.
+    static func swappedIn() -> UInt64 {
+        (vmStatistics()?.swapins ?? 0) * UInt64(vm_kernel_page_size)
+    }
+
+    /// Activity Monitor's "Memory Used": app memory, wired, and compressed.
+    static func memoryUsed() -> UInt64 {
+        guard let stats = vmStatistics() else { return 0 }
         let appPages = UInt64(stats.internal_page_count) - min(UInt64(stats.purgeable_count), UInt64(stats.internal_page_count))
         return (appPages + UInt64(stats.wire_count) + UInt64(stats.compressor_page_count)) * UInt64(vm_kernel_page_size)
     }

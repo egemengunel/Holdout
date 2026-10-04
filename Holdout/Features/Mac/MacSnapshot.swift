@@ -22,22 +22,44 @@ struct ProcessUsage: Equatable {
 }
 
 enum MacAlert: Equatable {
+    enum Severity {
+        /// Real slowdown: flashes red until you look.
+        case distress
+        /// Worth a glance: one soft orange flash, at most every half hour per kind.
+        case headsUp
+    }
+
+    /// Reading swapped-out memory back from disk faster than the Mac can keep up.
+    case thrashing(bytesPerSecond: UInt64)
     case pressure(MemoryPressure, since: TimeInterval)
-    case swapSurge(bytes: UInt64)
     case hog(ProcessUsage, since: TimeInterval)
+
+    var severity: Severity {
+        switch self {
+        case .thrashing, .pressure: .distress
+        case .hog: .headsUp
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .thrashing, .pressure: "memorychip"
+        case .hog: "cpu"
+        }
+    }
 
     /// Identifies an alert across samples, so its start time survives changing numbers.
     var key: String {
         switch self {
+        case .thrashing: "thrashing"
         case let .pressure(level, _): "pressure-\(level.rawValue)"
-        case .swapSurge: "swap"
         case let .hog(usage, _): "hog-\(usage.name)"
         }
     }
 
     var isMemory: Bool {
         switch self {
-        case .pressure, .swapSurge: true
+        case .thrashing, .pressure: true
         case .hog: false
         }
     }
@@ -50,6 +72,8 @@ struct MacSnapshot {
     let swapUsed: UInt64
     /// Swap growth over the last few minutes; negative when it shrank.
     let swapGrowth: Int64
+    /// Swap read back per second over the last minute.
+    let swapInRate: UInt64
     /// Percent of all cores.
     let cpu: Double
     /// Biggest memory users, largest first.

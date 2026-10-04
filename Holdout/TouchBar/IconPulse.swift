@@ -18,6 +18,8 @@ enum IconPulse: Equatable {
     case waiting
     /// Red, quick eased flashes, like the done check's but continuing until seen.
     case alert
+    /// Orange, two soft flashes that settle back to the hand: worth a glance, not urgent.
+    case headsUp(at: TimeInterval, symbol: String)
 
     static let idleSymbol = "hand.raised.fill"
     /// Roughly the Touch Bar's default button gray, so the pulse dims toward a resting button.
@@ -27,6 +29,16 @@ enum IconPulse: Equatable {
     private static let doneFlashPeriod: TimeInterval = 0.5
     private static let doneGlowDown: TimeInterval = 1.5
     static let doneDuration = Double(doneFlashes) * doneFlashPeriod + doneGlowDown
+    static let headsUpDuration: TimeInterval = 2.6
+
+    /// For states that play once and settle: when they began and how long they last.
+    var transient: (startedAt: TimeInterval, duration: TimeInterval)? {
+        switch self {
+        case let .done(at): (at, Self.doneDuration)
+        case let .headsUp(at, _): (at, Self.headsUpDuration)
+        default: nil
+        }
+    }
 
     var symbol: String {
         switch self {
@@ -35,6 +47,7 @@ enum IconPulse: Equatable {
         case .working: "apple.terminal.on.rectangle.fill"
         case .waiting: "hand.tap.fill"
         case .alert: "exclamationmark.triangle.fill"
+        case let .headsUp(_, symbol): symbol
         }
     }
 
@@ -46,6 +59,7 @@ enum IconPulse: Equatable {
         case .working: .systemBlue
         case .waiting: .systemOrange
         case .alert: .systemRed
+        case .headsUp: .systemOrange
         }
     }
 
@@ -67,6 +81,17 @@ enum IconPulse: Equatable {
             flash.duration = Self.doneFlashPeriod
             flash.repeatCount = .infinity
             return flash
+        case .headsUp:
+            // Gentler than the done check: two slow flashes that never reach full strength.
+            let flashes = CAKeyframeAnimation(keyPath: "backgroundColor")
+            flashes.values = [shade(0), shade(0.7), shade(0.15), shade(0.7), shade(0)]
+            flashes.keyTimes = [0, 0.25, 0.5, 0.75, 1]
+            flashes.timingFunctions = Array(repeating: CAMediaTimingFunction(name: .easeInEaseOut), count: 4)
+            flashes.duration = Self.headsUpDuration
+            flashes.timeOffset = elapsed
+            flashes.fillMode = .forwards
+            flashes.isRemovedOnCompletion = false
+            return flashes
         case .done:
             // Three quick flashes that each start bright, then an eased glow down to resting.
             var values: [CGColor] = []
