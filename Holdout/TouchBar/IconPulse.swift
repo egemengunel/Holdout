@@ -16,7 +16,7 @@ enum IconPulse: Equatable {
     case working
     /// Amber, quicker pulse.
     case waiting
-    /// Red, hard blink.
+    /// Red, quick eased flashes, like the done check's but continuing until seen.
     case alert
 
     static let idleSymbol = "hand.raised.fill"
@@ -59,13 +59,14 @@ enum IconPulse: Equatable {
         case .waiting:
             return breathe(floor: 0.25, period: 0.9)
         case .alert:
-            let blink = CAKeyframeAnimation(keyPath: "backgroundColor")
-            blink.values = [shade(1), shade(0.1)]
-            blink.keyTimes = [0, 0.5, 1]
-            blink.calculationMode = .discrete
-            blink.duration = 0.5
-            blink.repeatCount = .infinity
-            return blink
+            // The done check's quick eased flash, in red, until you look.
+            let flash = CAKeyframeAnimation(keyPath: "backgroundColor")
+            flash.values = [shade(1), shade(0.1), shade(1)]
+            flash.keyTimes = [0, 0.5, 1]
+            flash.timingFunctions = Array(repeating: CAMediaTimingFunction(name: .easeInEaseOut), count: 2)
+            flash.duration = Self.doneFlashPeriod
+            flash.repeatCount = .infinity
+            return flash
         case .done:
             // Three quick flashes that each start bright, then an eased glow down to resting.
             var values: [CGColor] = []

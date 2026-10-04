@@ -28,7 +28,7 @@ MV: models are value types, stores own and watch state, each tab is an AppKit st
 - Items are sized purely from `intrinsicContentSize`, and an item that doesn't fit is **hidden, not clipped**. The bar is ~1004 pt wide. `FlexibleWidthView` starts at a small minimum and grows into the measured free space; never give tab content a fixed width. Overflowing rows scroll horizontally inside it.
 - Background apps can't `activate()` others on macOS 14+; bring apps forward with `NSWorkspace.openApplication`.
 
-`TouchBar/IconPulse` maps status to the Control Strip icon's symbol, color and motion; `StatusIconView` plays it. The icon is a layer-backed view, not an `NSButton`, and all motion is Core Animation: animating a button's `bezelColor` from a timer re-rendered its bezel in software every frame (~35% CPU vs ~0.3% now). Its taps come from a click recognizer with `allowedTouchTypes = .direct`, which Touch Bar touches need. Priority: red alert (failed build or Mac alert) > amber waiting > blue working > green done flash.
+`TouchBar/IconPulse` maps status to the Control Strip icon's symbol, color and motion; `StatusIconView` plays it, entirely in layers: the background color is Core Animation (animating a bordered `NSButton`'s `bezelColor` from a timer re-rendered its bezel in software, ~35% CPU vs ~0.3% now), and the symbol is a pre-rendered white bitmap, because template symbols in a custom Touch Bar view (`NSImageView`, borderless `NSButton`) draw dimmed gray. An invisible borderless button takes the taps. Priority: red alert (failed build or Mac alert) > amber waiting > blue working > green done flash.
 
 ### Data flow from outside the app
 
