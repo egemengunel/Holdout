@@ -46,8 +46,7 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
     private let stripButton = NSButton()
     private let content = FlexibleWidthView(minWidth: contentMinWidth, height: contentHeight)
     private let agentsView = AgentsStripView()
-    private let simStatus = NSTextField(labelWithString: "")
-    private lazy var simView = makeSimView()
+    private let simView = SimulatorStripView()
     private let comingSoonLabel = NSTextField(labelWithString: "Coming next")
     /// Stack views center their content vertically; a bare label would sit at the top.
     private lazy var comingSoon = NSStackView(views: [comingSoonLabel])
@@ -57,6 +56,8 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
     private var wasWaiting = false
     private var ticker: Timer?
     private var visibilityObservation: NSKeyValueObservation?
+    private var pulse = IconPulse.idle
+    private var animation: Timer?
 
     private lazy var tabs = NSSegmentedControl(
         images: Tab.allCases.map { NSImage(systemSymbolName: $0.symbol, accessibilityDescription: $0.label)! },
@@ -74,8 +75,10 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
 
     /// Returns false when the private Touch Bar API isn't available on this macOS.
     func install() -> Bool {
-        stripButton.image = NSImage(systemSymbolName: "hand.raised.fill", accessibilityDescription: "Holdout")
+        stripButton.image = NSImage(systemSymbolName: IconPulse.idleSymbol, accessibilityDescription: "Holdout")
         stripButton.imagePosition = .imageOnly
+        // Keeps the working count right next to the hand instead of at the far edge.
+        stripButton.imageHugsTitle = true
         stripButton.bezelStyle = .rounded
         stripButton.target = self
         stripButton.action = #selector(openStrip)
@@ -141,6 +144,9 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         case .sim: simView
         case .project, .mac: comingSoon
         }
+        if tab == .sim {
+            simView.reload()
+        }
         guard view.superview !== content else { return }
 
         content.subviews.forEach { $0.removeFromSuperview() }
@@ -162,7 +168,8 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         let waiting = visible.contains { $0.state == .waiting }
         let working = visible.filter { $0.state.isWorking }.count
 
-        stripButton.bezelColor = waiting ? .systemOrange : working > 0 ? .systemBlue : nil
+        let lastFinished = visible.filter { $0.state == .done }.map(\.updatedAt).max()
+        setPulse(waiting ? .waiting : working > 0 ? .working : lastFinished.map { .done(at: $0) } ?? .idle)
         stripButton.title = !waiting && working > 0 ? "\(working)" : ""
         stripButton.imagePosition = stripButton.title.isEmpty ? .imageOnly : .imageLeading
 
@@ -175,6 +182,38 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         if isPresented && tab == .agents {
             agentsView.update(visible)
         }
+    }
+
+    // MARK: - Icon animation
+
+    private func setPulse(_ next: IconPulse) {
+        guard next != pulse else { return }
+        pulse = next
+        animateIcon()
+        guard animation == nil, stripButton.bezelColor != nil else { return }
+        animation = Timer.scheduledTimer(withTimeInterval: 1.0 / 24, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.animateIcon() }
+        }
+    }
+
+    /// Runs only while the icon has something to show; stops once it settles back to plain.
+    private func animateIcon() {
+        let now = Date.now.timeIntervalSince1970
+        let color = pulse.color(at: now, reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+        stripButton.bezelColor = color
+        setSymbol(pulse.symbol(at: now))
+        if color == nil {
+            animation?.invalidate()
+            animation = nil
+        }
+    }
+
+    private var currentSymbol = IconPulse.idleSymbol
+
+    private func setSymbol(_ name: String) {
+        guard name != currentSymbol else { return }
+        currentSymbol = name
+        stripButton.image = NSImage(systemSymbolName: name, accessibilityDescription: "Holdout")
     }
 
     /// Debug aid: the content view tree with frames.
@@ -212,31 +251,6 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
 
         default:
             return nil
-        }
-    }
-
-    // MARK: - Sim tab
-
-    private func makeSimView() -> NSView {
-        simStatus.textColor = .secondaryLabelColor
-        let appearance = NSButton(image: NSImage(systemSymbolName: "circle.lefthalf.filled", accessibilityDescription: "Toggle simulator appearance")!, target: self, action: #selector(toggleSimulatorAppearance))
-        let stack = NSStackView(views: [appearance, simStatus])
-        stack.orientation = .horizontal
-        stack.spacing = 8
-        return stack
-    }
-
-    @objc private func toggleSimulatorAppearance() {
-        simStatus.stringValue = "Asking the simulator…"
-        Task {
-            let current = await Shell.xcrun(["simctl", "ui", "booted", "appearance"])
-            guard current.status == 0 else {
-                simStatus.stringValue = "No booted simulator"
-                return
-            }
-            let next = current.output.contains("dark") ? "light" : "dark"
-            let result = await Shell.xcrun(["simctl", "ui", "booted", "appearance", next])
-            simStatus.stringValue = result.status == 0 ? "Simulator → \(next)" : "simctl failed"
         }
     }
 }
