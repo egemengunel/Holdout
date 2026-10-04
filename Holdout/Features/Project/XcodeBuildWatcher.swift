@@ -24,6 +24,13 @@ final class XcodeBuildWatcher {
         }
     }
 
+    /// The latest build of the project with this name, matched case-insensitively.
+    func latest(project: String) -> XcodeBuild? {
+        builds.values
+            .filter { $0.project.caseInsensitiveCompare(project) == .orderedSame }
+            .max { $0.finishedAt < $1.finishedAt }
+    }
+
     private func scan() {
         let projects = (try? FileManager.default.contentsOfDirectory(at: Self.derivedData, includingPropertiesForKeys: nil)) ?? []
         for project in projects {

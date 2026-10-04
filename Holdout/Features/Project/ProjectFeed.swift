@@ -43,6 +43,8 @@ struct ProjectFeed: Decodable {
     let session: String
     let cwd: String?
     let updatedAt: TimeInterval
+    /// When `build` last changed; ios-dock's build result carries no time of its own.
+    let buildAt: TimeInterval?
     let repo: Repo?
     let project: Project?
     let build: Build?

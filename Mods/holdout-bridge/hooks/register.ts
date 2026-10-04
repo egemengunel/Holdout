@@ -38,6 +38,9 @@ const PROMPTS: Record<string, (project: IosProject | null, repo: RepoInfo | null
 
 let stop: (() => void) | undefined
 let lastWritten = ''
+let lastBuild = ''
+/** When ios-dock's build result last changed, so Holdout can tell it from a newer Xcode build. */
+let buildAt: number | null = null
 let lastCommand = ''
 
 async function folder($: EngineInterface): Promise<{ base: string; session: string } | null> {
@@ -62,9 +65,14 @@ async function publish($: EngineInterface) {
   const [where, cwd, now] = await Promise.all([folder($), $.session.cwd(), $.clock.now()])
   if (!where) return
   lastWritten = body
+  const buildJSON = JSON.stringify(feed.build)
+  if (buildJSON !== lastBuild) {
+    lastBuild = buildJSON
+    buildAt = feed.build ? Math.floor(now / 1000) : null
+  }
   await $.fs.write(
     `${where.base}/feeds/${where.session}.json`,
-    JSON.stringify({ session: where.session, cwd, updatedAt: Math.floor(now / 1000), ...feed }),
+    JSON.stringify({ session: where.session, cwd, updatedAt: Math.floor(now / 1000), buildAt, ...feed }),
   )
 }
 

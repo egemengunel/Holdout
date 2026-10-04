@@ -5,7 +5,8 @@
 
 import AppKit
 
-/// The Project tab: the last Xcode build, then what your mods know about the current repo.
+/// The Project tab: which project and branch you're in, news only when there is some
+/// (a build result, lint issues, a TestFlight ship), and ios-dock's actions.
 final class ProjectStripView: NSView {
     /// ios-dock's buttons, sent through the holdout-bridge mod as the same prompts.
     enum Action: String {
@@ -14,8 +15,8 @@ final class ProjectStripView: NSView {
         var title: String {
             switch self {
             case .build: "Build"
-            case .lint: "Lint & fix"
-            case .commit: "Review & commit"
+            case .lint: "Lint"
+            case .commit: "Commit"
             }
         }
 
@@ -23,7 +24,7 @@ final class ProjectStripView: NSView {
             switch self {
             case .build: "hammer"
             case .lint: "wand.and.stars"
-            case .commit: "checkmark.seal"
+            case .commit: "checkmark.circle"
             }
         }
     }
@@ -36,6 +37,9 @@ final class ProjectStripView: NSView {
     private let scrollView = NSScrollView()
     private let emptyLabel = NSTextField(labelWithString: "No builds yet")
     private var build: XcodeBuild?
+    private var actions: [Action] = []
+    /// [ Build | Lint | Commit ] as one control, like the tabs and the Sim stepper.
+    private lazy var actionControl = NSSegmentedControl(labels: [], trackingMode: .momentary, target: self, action: #selector(runAction))
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -71,101 +75,90 @@ final class ProjectStripView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
-    func update(build: XcodeBuild?, feed: ProjectFeed?, now: Date = .now) {
-        self.build = build
-        var pills: [NSButton] = []
+    func update(xcodeBuild: XcodeBuild?, feed: ProjectFeed?, now: Date = .now) {
+        build = xcodeBuild
+        var views: [NSView] = []
 
-        if let build {
-            let detail = build.succeeded
-                ? "built \(Self.ago(build.finishedAt, now: now))" + (build.warnings > 0 ? " · \(build.warnings) ⚠︎" : "")
-                : Self.plural(build.errors, "error") + (build.warnings > 0 ? " · \(build.warnings) ⚠︎" : "")
-            let pill = pill(
-                symbol: build.succeeded ? "checkmark.circle.fill" : "xmark.octagon.fill",
-                tint: build.succeeded ? .systemGreen : .systemRed,
-                mark: .white,
-                title: build.project,
-                detail: detail,
-                action: #selector(openBuild)
-            )
-            pill.bezelColor = build.succeeded ? nil : Self.failedBezel
-            pills.append(pill)
+        if let feed, let name = feed.project?.name ?? feed.repo?.name {
+            let ahead = feed.ship.flatMap { $0.ahead > 0 ? "\($0.ahead) ahead" : nil }
+            let detail = [feed.project?.branch ?? feed.repo?.branch, ahead].compactMap { $0 }.joined(separator: " · ")
+            views.append(pill(symbol: "arrow.triangle.branch", tint: .systemPurple, title: name, detail: detail))
+            views += news(xcodeBuild: xcodeBuild, feed: feed, now: now)
+            if let control = actionsControl(feed) {
+                views.append(control)
+            }
+        } else if let xcodeBuild {
+            // No Claude session in a project: just Xcode's latest build, named.
+            views.append(buildPill(xcodeBuild, named: true, now: now))
         }
 
-        if let feed {
-            pills += modPills(feed)
-        }
-
-        emptyLabel.isHidden = !pills.isEmpty
-        stack.setViews(pills, in: .leading)
+        emptyLabel.isHidden = !views.isEmpty
+        stack.setViews(views, in: .leading)
     }
 
-    /// Mirrors ios-dock's band: project, branch, build, lint, shipping, then its buttons.
-    private func modPills(_ feed: ProjectFeed) -> [NSButton] {
-        var pills: [NSButton] = []
-        let ahead = feed.ship.flatMap { $0.ahead > 0 ? "\($0.ahead) ahead" : nil }
+    /// Only what's worth a glance: the newer of Xcode's and Claude's build, lint issues, a ship in flight.
+    private func news(xcodeBuild: XcodeBuild?, feed: ProjectFeed, now: Date) -> [NSView] {
+        var views: [NSView] = []
+        let claudeBuildIsNewer = feed.build != nil
+            && (feed.buildAt ?? 0) > (xcodeBuild?.finishedAt.timeIntervalSince1970 ?? 0)
 
-        if let project = feed.project {
-            let traits = [project.architecture, project.deploymentTarget.map { "iOS \($0)" }, project.isSynced ? "synced" : "pbxproj"]
-            pills.append(pill(symbol: "diamond.fill", tint: .systemBlue, title: project.name, detail: traits.compactMap { $0 }.joined(separator: " · ")))
-            if let branch = project.branch ?? feed.repo?.branch {
-                pills.append(pill(symbol: "arrow.triangle.branch", tint: .systemPurple, title: branch, detail: ahead ?? ""))
-            }
-        } else if let repo = feed.repo {
-            let detail = [repo.branch, ahead].compactMap { $0 }.joined(separator: " · ")
-            pills.append(pill(symbol: "arrow.triangle.branch", tint: .systemPurple, title: repo.name, detail: detail))
+        if claudeBuildIsNewer, let claude = feed.build {
+            let pill = claude.isOk
+                ? pill(symbol: "checkmark.circle.fill", tint: .systemGreen, mark: .white, title: Self.ago(Date(timeIntervalSince1970: feed.buildAt ?? 0), now: now), detail: "")
+                : pill(symbol: "xmark.octagon.fill", tint: .systemRed, mark: .white, title: Self.plural(claude.errorCount, "error"), detail: claude.firstError.map { Self.shorten($0) } ?? "")
+            pill.bezelColor = claude.isOk ? nil : Self.failedBezel
+            views.append(pill)
+        } else if let xcodeBuild {
+            views.append(buildPill(xcodeBuild, named: false, now: now))
         }
 
-        if let build = feed.build {
-            pills.append(pill(
-                symbol: build.isOk ? "hammer.fill" : "xmark",
-                tint: build.isOk ? .systemGreen : .systemRed,
-                title: build.isOk ? "Built in \(Int(build.seconds))s" : "Build failed",
-                detail: build.isOk
-                    ? build.warningCount.map { $0 > 0 ? Self.plural($0, "warning") : "" } ?? ""
-                    : build.firstError.map { Self.shorten($0) } ?? Self.plural(build.errorCount, "error")
-            ))
-        } else if feed.project != nil {
-            pills.append(pill(symbol: "hammer", tint: .secondaryLabelColor, title: "No build yet", detail: ""))
-        }
-
-        if feed.project != nil {
-            let lintPill = switch feed.lint {
-            case let lint? where lint.checkedEdits > 0 && lint.issues > 0:
-                pill(symbol: "pencil.line", tint: .systemOrange, title: Self.plural(lint.issues, "lint issue"), detail: "")
-            case let lint? where lint.checkedEdits > 0:
-                pill(symbol: "pencil.line", tint: .systemGreen, title: "Lint clean", detail: Self.plural(lint.checkedEdits, "edit"))
-            default:
-                pill(symbol: "pencil.line", tint: .secondaryLabelColor, title: "Design lint idle", detail: "")
-            }
-            pills.append(lintPill)
+        if let lint = feed.lint, lint.checkedEdits > 0, lint.issues > 0 {
+            views.append(pill(symbol: "pencil.line", tint: .systemOrange, title: "\(lint.issues)", detail: lint.issues == 1 ? "lint issue" : "lint issues"))
         }
 
         if let ship = feed.ship, ship.phase != "idle" {
             let failed = ship.phase == "failed" || ship.phase == "conflict"
-            pills.append(pill(symbol: "arrow.up.circle", tint: failed ? .systemRed : .systemBlue, title: "TestFlight", detail: ship.note.map { Self.shorten($0) } ?? ship.phase))
+            views.append(pill(symbol: "arrow.up.circle", tint: failed ? .systemRed : .systemBlue, title: "TestFlight", detail: ship.note.map { Self.shorten($0) } ?? ship.phase))
         }
 
-        if feed.project != nil {
-            pills.append(actionButton(.build))
-            pills.append(actionButton(.lint))
-        }
-        if feed.repo != nil {
-            pills.append(actionButton(.commit))
-        }
-        return pills
+        // Problems first, right after the project chip.
+        return views.sorted { ($0 as? NSButton)?.bezelColor == Self.failedBezel && ($1 as? NSButton)?.bezelColor != Self.failedBezel }
     }
 
-    private func actionButton(_ action: Action) -> NSButton {
-        let button = NSButton(title: action.title, image: NSImage(systemSymbolName: action.symbol, accessibilityDescription: nil)!, target: self, action: #selector(runAction(_:)))
-        button.imagePosition = .imageLeading
-        button.imageHugsTitle = true
-        button.identifier = NSUserInterfaceItemIdentifier(action.rawValue)
-        return button
+    private func buildPill(_ build: XcodeBuild, named: Bool, now: Date) -> NSButton {
+        let warnings = build.warnings > 0 ? "\(build.warnings) ⚠︎" : nil
+        let pill = build.succeeded
+            ? pill(
+                symbol: "checkmark.circle.fill", tint: .systemGreen, mark: .white,
+                title: named ? build.project : Self.ago(build.finishedAt, now: now),
+                detail: [named ? "built \(Self.ago(build.finishedAt, now: now))" : nil, warnings].compactMap { $0 }.joined(separator: " · "),
+                action: #selector(openBuild)
+            )
+            : pill(
+                symbol: "xmark.octagon.fill", tint: .systemRed, mark: .white,
+                title: named ? build.project : Self.plural(build.errors, "error"),
+                detail: [named ? Self.plural(build.errors, "error") : nil, warnings].compactMap { $0 }.joined(separator: " · "),
+                action: #selector(openBuild)
+            )
+        pill.bezelColor = build.succeeded ? nil : Self.failedBezel
+        return pill
     }
 
-    @objc private func runAction(_ sender: NSButton) {
-        guard let action = sender.identifier.flatMap({ Action(rawValue: $0.rawValue) }) else { return }
-        onCommand?(action)
+    private func actionsControl(_ feed: ProjectFeed) -> NSSegmentedControl? {
+        actions = (feed.project != nil ? [.build, .lint] : []) + (feed.repo != nil ? [.commit] : [])
+        guard !actions.isEmpty else { return nil }
+        actionControl.segmentCount = actions.count
+        for (segment, action) in actions.enumerated() {
+            actionControl.setLabel(action.title, forSegment: segment)
+            actionControl.setImage(NSImage(systemSymbolName: action.symbol, accessibilityDescription: nil), forSegment: segment)
+            actionControl.setWidth(0, forSegment: segment)
+        }
+        return actionControl
+    }
+
+    @objc private func runAction() {
+        guard actions.indices.contains(actionControl.selectedSegment) else { return }
+        onCommand?(actions[actionControl.selectedSegment])
     }
 
     @objc private func openBuild() {

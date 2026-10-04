@@ -200,7 +200,10 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         }
         if isPresented && tab == .project {
             failuresSeenUntil = Date.now.timeIntervalSince1970
-            projectView.update(build: builds.latest, feed: currentFeed)
+            let feed = currentFeed
+            // With a session open, its own project's Xcode build; otherwise the latest of any.
+            let xcodeBuild = (feed?.project?.name ?? feed?.repo?.name).map { builds.latest(project: $0) } ?? builds.latest
+            projectView.update(xcodeBuild: xcodeBuild, feed: feed)
         }
     }
 
