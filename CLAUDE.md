@@ -28,7 +28,7 @@ MV: models are value types, stores own and watch state, each tab is an AppKit st
 - Items are sized purely from `intrinsicContentSize`, and an item that doesn't fit is **hidden, not clipped**. The bar is ~1004 pt wide. `FlexibleWidthView` starts at a small minimum and grows into the measured free space; never give tab content a fixed width. Overflowing rows scroll horizontally inside it.
 - Background apps can't `activate()` others on macOS 14+; bring apps forward with `NSWorkspace.openApplication`.
 
-`TouchBar/IconPulse` maps status to the Control Strip icon's symbol, bezel color and motion (24 fps timer, only while not idle; honors Reduce Motion). Priority: red alert > amber waiting > blue working > green done flash.
+`TouchBar/IconPulse` maps status to the Control Strip icon's symbol, color and motion; `StatusIconView` plays it. The icon is a layer-backed view, not an `NSButton`, and all motion is Core Animation: animating a button's `bezelColor` from a timer re-rendered its bezel in software every frame (~35% CPU vs ~0.3% now). Its taps come from a click recognizer with `allowedTouchTypes = .direct`, which Touch Bar touches need. Priority: red alert (failed build or Mac alert) > amber waiting > blue working > green done flash.
 
 ### Data flow from outside the app
 
@@ -49,4 +49,5 @@ The bridge's `types/index.d.ts` copies the slices of the other mods' state contr
 
 - Tabs show news, not placeholders: a chip appears only when it has something to say (the Project tab drops "no build yet"-style chips, puts failures first, and groups actions in one segmented control).
 - Prefer native AppKit Touch Bar controls and SF Symbols over custom drawing; tab bar icons are outline symbols.
+- `Features/Mac` samples every 5 s through sysctl, Mach host statistics and `proc_pid_rusage` (CPU times are Mach ticks; convert with the timebase). Processes are summed by name.
 - The Mac tab's memory watchdog must be generic for low-RAM Macs: use the system memory-pressure level, swap growth and dynamically found top consumers, never per-machine baselines or hardcoded process lists.

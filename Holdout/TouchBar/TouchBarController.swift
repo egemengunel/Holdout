@@ -43,16 +43,15 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
     private static let tabWidth: CGFloat = 34
 
     private let sessions = SessionStore()
-    private let stripButton = NSButton()
+    private let statusIcon = StatusIconView()
     private let content = FlexibleWidthView(minWidth: contentMinWidth, height: contentHeight)
     private let agentsView = AgentsStripView()
     private let simView = SimulatorStripView()
     private let projectView = ProjectStripView()
     private let builds = XcodeBuildWatcher()
     private let feeds = ProjectFeedStore()
-    private let comingSoonLabel = NSTextField(labelWithString: "Coming next")
-    /// Stack views center their content vertically; a bare label would sit at the top.
-    private lazy var comingSoon = NSStackView(views: [comingSoonLabel])
+    private let macView = MacStripView()
+    private let mac = MacMonitor()
 
     private var tab = Tab.agents
     private var isPresented = false
@@ -62,8 +61,8 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
     /// Failures up to this moment have been seen (in the Project tab), so they stop blinking red.
     /// Starts at launch, so an old failure doesn't alarm when Holdout starts.
     private var failuresSeenUntil = Date.now.timeIntervalSince1970
-    private var pulse = IconPulse.idle
-    private var animation: Timer?
+    /// Same, for the Mac tab's alerts.
+    private var macAlertsSeenUntil = Date.now.timeIntervalSince1970
 
     private lazy var tabs = NSSegmentedControl(
         images: Tab.allCases.map { NSImage(systemSymbolName: $0.symbol, accessibilityDescription: $0.label)! },
@@ -81,16 +80,10 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
 
     /// Returns false when the private Touch Bar API isn't available on this macOS.
     func install() -> Bool {
-        stripButton.image = NSImage(systemSymbolName: IconPulse.idleSymbol, accessibilityDescription: "Holdout")
-        stripButton.imagePosition = .imageOnly
-        // Keeps the working count right next to the hand instead of at the far edge.
-        stripButton.imageHugsTitle = true
-        stripButton.bezelStyle = .rounded
-        stripButton.target = self
-        stripButton.action = #selector(openStrip)
+        statusIcon.onPress = { [weak self] in self?.openStrip() }
 
         let item = NSCustomTouchBarItem(identifier: Self.controlStripID)
-        item.view = stripButton
+        item.view = statusIcon
         guard SystemTouchBar.addToControlStrip(item) else { return false }
         SystemTouchBar.showsSystemCloseBox(true)
 
@@ -110,11 +103,12 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         }
         agentsView.onSelect = { [weak self] session in self?.focus(session) }
         projectView.onCommand = { [weak self] action in self?.send(action) }
-        comingSoonLabel.textColor = .secondaryLabelColor
         sessions.onChange = { [weak self] in self?.refresh() }
         sessions.start()
         builds.onChange = { [weak self] in self?.refresh() }
         builds.start()
+        mac.onChange = { [weak self] in self?.refresh() }
+        mac.start()
         feeds.onChange = { [weak self] in self?.refresh() }
         feeds.isLive = { [weak self] id in self?.sessions.sessions.contains { $0.id == id } ?? true }
         feeds.start()
@@ -129,7 +123,9 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
     // MARK: - Presenting
 
     @objc func openStrip() {
-        if latestFailure != nil {
+        if let macAlert = unseenMacAlert, macAlert >= (latestFailure ?? 0) {
+            tab = .mac
+        } else if latestFailure != nil {
             tab = .project
         } else if sessions.visible().contains(where: { $0.state == .waiting }) {
             tab = .agents
@@ -157,7 +153,7 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         case .agents: agentsView
         case .sim: simView
         case .project: projectView
-        case .mac: comingSoon
+        case .mac: macView
         }
         if tab == .sim {
             simView.reload()
@@ -184,10 +180,12 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         let working = visible.filter { $0.state.isWorking }.count
 
         let lastFinished = visible.filter { $0.state == .done }.map(\.updatedAt).max()
-        let failed = latestFailure != nil
-        setPulse(failed ? .alert : waiting ? .waiting : working > 0 ? .working : lastFinished.map { .done(at: $0) } ?? .idle)
-        stripButton.title = !waiting && working > 0 ? "\(working)" : ""
-        stripButton.imagePosition = stripButton.title.isEmpty ? .imageOnly : .imageLeading
+        let failed = latestFailure != nil || unseenMacAlert != nil
+        statusIcon.show(
+            failed ? .alert : waiting ? .waiting : working > 0 ? .working : lastFinished.map { .done(at: $0) } ?? .idle,
+            reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        )
+        statusIcon.setCount(!failed && !waiting && working > 0 ? working : nil)
 
         // Xcode's debugger can take the Control Strip slot; something needing you takes it back.
         if waiting && !wasWaiting {
@@ -204,6 +202,10 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
             // With a session open, its own project's Xcode build; otherwise the latest of any.
             let xcodeBuild = (feed?.project?.name ?? feed?.repo?.name).map { builds.latest(project: $0) } ?? builds.latest
             projectView.update(xcodeBuild: xcodeBuild, feed: feed)
+        }
+        if isPresented && tab == .mac {
+            macAlertsSeenUntil = Date.now.timeIntervalSince1970
+            macView.update(mac.snapshot)
         }
     }
 
@@ -230,49 +232,16 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         }
     }
 
+    /// When the newest Mac alert started, if it began after you last looked at the Mac tab.
+    private var unseenMacAlert: TimeInterval? {
+        mac.newestAlert.flatMap { $0 > macAlertsSeenUntil ? $0 : nil }
+    }
+
     /// When the newest unseen failed build (Xcode's own, or one Claude ran through ios-dock) finished.
     private var latestFailure: TimeInterval? {
         let xcode = builds.latest.flatMap { $0.succeeded ? nil : $0.finishedAt.timeIntervalSince1970 }
         let claude = currentFeed.flatMap { $0.build?.isOk == false ? $0.updatedAt : nil }
         return [xcode, claude].compactMap { $0 }.filter { $0 > failuresSeenUntil }.max()
-    }
-
-    // MARK: - Icon animation
-
-    private func setPulse(_ next: IconPulse) {
-        guard next != pulse else { return }
-        pulse = next
-        animateIcon()
-        guard animation == nil, stripButton.bezelColor != nil else { return }
-        animation = Timer.scheduledTimer(withTimeInterval: 1.0 / 24, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.animateIcon() }
-        }
-    }
-
-    /// Runs only while the icon has something to show; stops once it settles back to plain.
-    private func animateIcon() {
-        let now = Date.now.timeIntervalSince1970
-        let color = pulse.color(at: now, reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
-        stripButton.bezelColor = color
-        setSymbol(pulse.symbol(at: now))
-        let opacity = pulse.symbolOpacity(at: now)
-        stripButton.contentTintColor = opacity < 1 ? NSColor.labelColor.withAlphaComponent(opacity) : nil
-        if color == nil {
-            animation?.invalidate()
-            animation = nil
-        }
-    }
-
-    private var currentSymbol = IconPulse.idleSymbol
-
-    private func setSymbol(_ name: String) {
-        guard name != currentSymbol else { return }
-        currentSymbol = name
-        let image = NSImage(systemSymbolName: name, accessibilityDescription: "Holdout")
-        // The bare checkmark reads thin next to the filled symbols.
-        stripButton.image = name == "checkmark"
-            ? image?.withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: NSFont.systemFontSize, weight: .medium))
-            : image
     }
 
     /// Debug aid: the content view tree with frames.
