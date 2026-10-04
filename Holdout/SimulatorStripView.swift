@@ -7,32 +7,41 @@ import AppKit
 
 /// The Sim tab: quick controls for the booted iOS Simulator.
 final class SimulatorStripView: NSView {
+    /// Xcode 27 replaced Simulator.app with DeviceHub.app; older Xcodes still ship Simulator.
+    private static let simulatorAppIDs = ["com.apple.dt.Devices", "com.apple.iphonesimulator"]
+
     private static let locations: [(name: String, coordinate: String)] = [
         ("Apple Park", "37.3349,-122.0090"),
         ("London", "51.5072,-0.1276"),
         ("Tokyo", "35.6764,139.6500"),
     ]
 
+    /// Current Dynamic Type size, as an index into `Simulator.contentSizes`.
+    private var contentSize = Simulator.defaultContentSize
+
     private let infoLabel = NSTextField(labelWithString: "")
-    private let sizeLabel = NSTextField(labelWithString: "")
-    private lazy var sizeSlider = NSSlider(
-        value: Double(Simulator.defaultContentSize),
-        minValue: 0,
-        maxValue: Double(Simulator.contentSizes.count - 1),
-        target: self,
-        action: #selector(sizeChanged)
-    )
+    /// [ − | L | + ]: steps Dynamic Type one size at a time; the middle shows the current size.
+    private lazy var textSize: NSSegmentedControl = {
+        let control = NSSegmentedControl(labels: ["", "", ""], trackingMode: .momentary, target: self, action: #selector(stepTextSize))
+        control.setImage(NSImage(systemSymbolName: "minus", accessibilityDescription: "Smaller text"), forSegment: 0)
+        control.setImage(NSImage(systemSymbolName: "plus", accessibilityDescription: "Larger text"), forSegment: 2)
+        control.setWidth(36, forSegment: 0)
+        control.setWidth(44, forSegment: 1)
+        control.setWidth(36, forSegment: 2)
+        return control
+    }()
     private lazy var statusBarButton = NSButton(title: "9:41", target: self, action: #selector(toggleStatusBar))
     private lazy var controls = NSStackView(views: [
         infoLabel,
         button("circle.lefthalf.filled", "Toggle light and dark", #selector(toggleAppearance)),
-        sizeStack,
+        textSize,
         button("camera", "Save a screenshot to the Desktop", #selector(screenshot)),
         statusBarButton,
         button("bell", "Send a test push to the running app", #selector(push)),
         button("location", "Cycle simulated location", #selector(cycleLocation)),
     ])
-    private lazy var sizeStack = NSStackView(views: [sizeSlider, sizeLabel])
+    /// More controls than fit beside the Control Strip, so they scroll sideways like the Agents pills.
+    private let controlsScroll = NSScrollView()
 
     private let emptyLabel = NSTextField(labelWithString: "No simulator running")
     private lazy var bootButton = NSButton(title: "Boot", target: self, action: #selector(boot))
@@ -51,25 +60,32 @@ final class SimulatorStripView: NSView {
 
         infoLabel.lineBreakMode = .byTruncatingTail
         infoLabel.widthAnchor.constraint(lessThanOrEqualToConstant: 110).isActive = true
-        infoLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        sizeSlider.numberOfTickMarks = Simulator.contentSizes.count
-        sizeSlider.allowsTickMarkValuesOnly = true
-        sizeSlider.widthAnchor.constraint(equalToConstant: 110).isActive = true
-        sizeLabel.textColor = .secondaryLabelColor
-        sizeLabel.widthAnchor.constraint(equalToConstant: 38).isActive = true
         emptyLabel.textColor = .secondaryLabelColor
 
         for stack in [controls, empty] {
             stack.orientation = .horizontal
             stack.spacing = 6
             stack.translatesAutoresizingMaskIntoConstraints = false
-            addSubview(stack)
-            NSLayoutConstraint.activate([
-                stack.leadingAnchor.constraint(equalTo: leadingAnchor),
-                stack.centerYAnchor.constraint(equalTo: centerYAnchor),
-            ])
         }
-        sizeStack.spacing = 4
+
+        controlsScroll.drawsBackground = false
+        controlsScroll.hasHorizontalScroller = false
+        controlsScroll.hasVerticalScroller = false
+        controlsScroll.documentView = controls
+        controlsScroll.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(controlsScroll)
+        addSubview(empty)
+        NSLayoutConstraint.activate([
+            controlsScroll.leadingAnchor.constraint(equalTo: leadingAnchor),
+            controlsScroll.trailingAnchor.constraint(equalTo: trailingAnchor),
+            controlsScroll.topAnchor.constraint(equalTo: topAnchor),
+            controlsScroll.bottomAnchor.constraint(equalTo: bottomAnchor),
+            controls.leadingAnchor.constraint(equalTo: controlsScroll.contentView.leadingAnchor),
+            controls.topAnchor.constraint(equalTo: controlsScroll.contentView.topAnchor),
+            controls.bottomAnchor.constraint(equalTo: controlsScroll.contentView.bottomAnchor),
+            empty.leadingAnchor.constraint(equalTo: leadingAnchor),
+            empty.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
         show(device: nil)
     }
 
@@ -81,9 +97,7 @@ final class SimulatorStripView: NSView {
         Task {
             let booted = await Simulator.booted()
             if let booted {
-                let size = await Simulator.contentSize(booted.udid)
-                sizeSlider.integerValue = size
-                sizeLabel.stringValue = Simulator.contentSizeLabels[size]
+                contentSize = await Simulator.contentSize(booted.udid)
             } else {
                 bootCandidate = await Simulator.lastUsed()
             }
@@ -93,9 +107,10 @@ final class SimulatorStripView: NSView {
 
     private func show(device: Simulator.Device?) {
         self.device = device
-        controls.isHidden = device == nil
+        controlsScroll.isHidden = device == nil
         empty.isHidden = device != nil
         infoLabel.stringValue = device.map { Self.shortName($0) } ?? ""
+        textSize.setLabel(Simulator.contentSizeLabels[contentSize], forSegment: 1)
         bootButton.title = bootCandidate.map { "Boot \($0.name)" } ?? "Boot"
         bootButton.isHidden = bootCandidate == nil
         if let device {
@@ -114,10 +129,21 @@ final class SimulatorStripView: NSView {
         }
     }
 
-    /// The slider fires continuously while dragging; apply only the latest size, one at a time.
-    @objc private func sizeChanged() {
-        let index = sizeSlider.integerValue
-        sizeLabel.stringValue = Simulator.contentSizeLabels[index]
+    @objc private func stepTextSize() {
+        let step = switch textSize.selectedSegment {
+        case 0: -1
+        case 2: 1
+        default: 0
+        }
+        let index = min(max(contentSize + step, 0), Simulator.contentSizes.count - 1)
+        guard index != contentSize else { return }
+        applyContentSize(index)
+    }
+
+    /// Quick taps can outpace simctl; apply only the latest size, one at a time.
+    private func applyContentSize(_ index: Int) {
+        contentSize = index
+        textSize.setLabel(Simulator.contentSizeLabels[index], forSegment: 1)
         pendingSize = index
         guard !isApplyingSize, let udid = device?.udid else { return }
         isApplyingSize = true
@@ -200,7 +226,7 @@ final class SimulatorStripView: NSView {
         bootButton.isHidden = true
         Task {
             await Simulator.run(["boot", candidate.udid])
-            if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.iphonesimulator") {
+            if let url = Self.simulatorAppIDs.lazy.compactMap({ NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) }).first {
                 _ = try? await NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
             }
             emptyLabel.stringValue = "No simulator running"

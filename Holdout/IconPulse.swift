@@ -24,7 +24,7 @@ enum IconPulse: Equatable {
         switch self {
         case .idle: Self.idleSymbol
         case let .done(finishedAt): now - finishedAt < Self.doneFade ? "checkmark" : Self.idleSymbol
-        case .working: "sparkles"
+        case .working: "apple.terminal.on.rectangle.fill"
         case .waiting: "hand.tap.fill"
         case .alert: "exclamationmark.triangle.fill"
         }
