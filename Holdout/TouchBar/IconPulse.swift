@@ -11,7 +11,8 @@ enum IconPulse: Equatable {
     case idle
     /// Green check that flashes quickly a few times after a session finishes, glows down,
     /// then cross-fades back to the hand.
-    case done(at: TimeInterval)
+    /// Also plays for a successful Xcode build, with a hammer instead of the check.
+    case done(at: TimeInterval, symbol: String = "checkmark")
     /// Blue, slow breathing.
     case working
     /// Amber, quicker pulse.
@@ -34,7 +35,7 @@ enum IconPulse: Equatable {
     /// For states that play once and settle: when they began and how long they last.
     var transient: (startedAt: TimeInterval, duration: TimeInterval)? {
         switch self {
-        case let .done(at): (at, Self.doneDuration)
+        case let .done(at, _): (at, Self.doneDuration)
         case let .headsUp(at, _): (at, Self.headsUpDuration)
         default: nil
         }
@@ -43,7 +44,7 @@ enum IconPulse: Equatable {
     var symbol: String {
         switch self {
         case .idle: Self.idleSymbol
-        case .done: "checkmark"
+        case let .done(_, symbol): symbol
         case .working: "apple.terminal.on.rectangle.fill"
         case .waiting: "hand.tap.fill"
         case .alert: "exclamationmark.triangle.fill"

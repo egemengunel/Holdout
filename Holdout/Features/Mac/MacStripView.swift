@@ -61,7 +61,7 @@ final class MacStripView: NSView {
             let bezel = alert.severity == .distress ? Self.criticalBezel : Self.warningBezel
             switch alert {
             case let .thrashing(rate):
-                let chip = chip(symbol: "memorychip", tint: .white, title: "Memory thrashing", detail: "\(Self.megabytes(rate))/s from swap")
+                let chip = chip(symbol: "memorychip", tint: .white, title: "Out of memory", detail: "swapping \(Self.megabytes(rate))/s, expect lag")
                 chip.bezelColor = bezel
                 views.append(chip)
             case let .pressure(level, since):

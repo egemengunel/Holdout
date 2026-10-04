@@ -24,7 +24,7 @@ MV: models are value types, stores own and watch state, each tab is an AppKit st
 `TouchBar/SystemTouchBar` wraps private DFRFoundation / `NSTouchBar` calls, looked up at runtime (`dlsym`, `class_getClassMethod`) so their removal fails soft. The app is unsandboxed and an `LSUIElement` agent. Behaviors verified on device that the code depends on:
 
 - Presented with placement `0` the strip sits beside the Control Strip and the system draws its native ✕ whenever another app is frontmost, which is why Holdout must stay a background agent. There is deliberately no custom close button.
-- Closing the strip drops Holdout's Control Strip item; `TouchBarController` observes `NSTouchBar.isVisible` and re-calls `showInControlStrip`. Xcode's debugger can also take the slot; an amber (needs-you) state reclaims it.
+- Closing the strip drops Holdout's Control Strip item; `TouchBarController` observes `NSTouchBar.isVisible` and re-calls `showInControlStrip`. Xcode's debugger takes the slot whenever it debugs any app, so the controller reclaims it on every app switch and every 5 s while the strip is closed (a no-op when already held).
 - Items are sized purely from `intrinsicContentSize`, and an item that doesn't fit is **hidden, not clipped**. The bar is ~1004 pt wide. `FlexibleWidthView` starts at a small minimum and grows into the measured free space; never give tab content a fixed width. Overflowing rows scroll horizontally inside it.
 - Background apps can't `activate()` others on macOS 14+; bring apps forward with `NSWorkspace.openApplication`.
 

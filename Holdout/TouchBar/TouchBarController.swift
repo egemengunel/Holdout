@@ -55,12 +55,17 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
 
     private var tab = Tab.agents
     private var isPresented = false
-    private var wasWaiting = false
+    private var slotTimer: Timer?
+    private var activationObserver: NSObjectProtocol?
     private var ticker: Timer?
     private var visibilityObservation: NSKeyValueObservation?
     /// Failures up to this moment have been seen (in the Project tab), so they stop blinking red.
     /// Starts at launch, so an old failure doesn't alarm when Holdout starts.
     private var failuresSeenUntil = Date.now.timeIntervalSince1970
+    /// The newest Xcode build already accounted for; starts at launch so old builds don't flash.
+    private var lastBuildSeen = Date.now
+    /// When Holdout noticed a fresh successful build, to flash the hammer from that moment.
+    private var buildSucceededAt: TimeInterval?
     /// Same, for the Mac tab's alerts.
     private var macAlertsSeenUntil = Date.now.timeIntervalSince1970
 
@@ -105,13 +110,25 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         projectView.onCommand = { [weak self] action in self?.send(action) }
         sessions.onChange = { [weak self] in self?.refresh() }
         sessions.start()
-        builds.onChange = { [weak self] in self?.refresh() }
+        builds.onChange = { [weak self] in self?.buildsChanged() }
         builds.start()
         mac.onChange = { [weak self] in self?.refresh() }
         mac.start()
         feeds.onChange = { [weak self] in self?.refresh() }
         feeds.isLive = { [weak self] id in self?.sessions.sessions.contains { $0.id == id } ?? true }
         feeds.start()
+
+        // Xcode's debugger puts its own item in the Control Strip's one extra slot whenever it
+        // debugs any app. Take the slot back when you switch apps and every few seconds;
+        // re-asserting while already holding it is a no-op.
+        activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.reclaimControlStrip() }
+        }
+        slotTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.reclaimControlStrip() }
+        }
 
         // Elapsed times tick, and finished sessions drop off after a minute.
         ticker = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
@@ -180,8 +197,13 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         let working = visible.filter { $0.state.isWorking }.count
 
         // Only while its flash is still playing; done sessions stay listed far longer.
-        let lastFinished = visible.filter { $0.state == .done }.map(\.updatedAt).max()
-            .flatMap { Date.now.timeIntervalSince1970 - $0 < IconPulse.doneDuration ? $0 : nil }
+        let now = Date.now.timeIntervalSince1970
+        let sessionDone = visible.filter { $0.state == .done }.map(\.updatedAt).max()
+            .flatMap { now - $0 < IconPulse.doneDuration ? IconPulse.done(at: $0) : nil }
+        let buildDone = buildSucceededAt
+            .flatMap { now - $0 < IconPulse.doneDuration ? IconPulse.done(at: $0, symbol: "hammer.fill") : nil }
+        // Whichever finished last gets the flash.
+        let celebration = [sessionDone, buildDone].compactMap { $0 }.max { ($0.transient?.startedAt ?? 0) < ($1.transient?.startedAt ?? 0) }
         let failed = latestFailure != nil || unseenMacAlert != nil
         let headsUp = mac.headsUp.flatMap { Date.now.timeIntervalSince1970 - $0.at < IconPulse.headsUpDuration ? $0 : nil }
         // A heads-up is brief, so it plays over working; a session waiting on you still wins.
@@ -189,16 +211,10 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
             failed ? .alert
                 : waiting ? .waiting
                 : headsUp.map { .headsUp(at: $0.at, symbol: $0.symbol) }
-                ?? (working > 0 ? .working : lastFinished.map { .done(at: $0) } ?? .idle),
+                ?? (working > 0 ? .working : celebration ?? .idle),
             reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         )
         statusIcon.setCount(!failed && !waiting && headsUp == nil && working > 0 ? working : nil)
-
-        // Xcode's debugger can take the Control Strip slot; something needing you takes it back.
-        if waiting && !wasWaiting {
-            SystemTouchBar.showInControlStrip(Self.controlStripID)
-        }
-        wasWaiting = waiting
 
         if isPresented && tab == .agents {
             agentsView.update(visible)
@@ -237,6 +253,24 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         if let session = sessions.sessions.first(where: { $0.id == feed.session }) {
             focus(session)
         }
+    }
+
+    /// While the strip is open it owns the bar; closing it reclaims the slot itself.
+    private func reclaimControlStrip() {
+        guard !isPresented else { return }
+        SystemTouchBar.showInControlStrip(Self.controlStripID)
+    }
+
+    /// A newly finished successful build gets the done flash with a hammer. Builds are polled
+    /// every 2 s, so it's timed from when Holdout noticed, or most of the flash would be over.
+    private func buildsChanged() {
+        if let build = builds.latest, build.finishedAt > lastBuildSeen {
+            lastBuildSeen = build.finishedAt
+            if build.succeeded {
+                buildSucceededAt = Date.now.timeIntervalSince1970
+            }
+        }
+        refresh()
     }
 
     /// When the newest Mac alert started, if it began after you last looked at the Mac tab.
