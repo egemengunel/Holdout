@@ -60,10 +60,6 @@ final class MacStripView: NSView {
         for alert in snapshot.alerts {
             let bezel = alert.severity == .distress ? Self.criticalBezel : Self.warningBezel
             switch alert {
-            case let .thrashing(rate):
-                let chip = chip(symbol: "memorychip", tint: .white, title: "Out of memory", detail: "swapping \(Self.megabytes(rate))/s, expect lag")
-                chip.bezelColor = bezel
-                views.append(chip)
             case let .pressure(level, since):
                 let chip = chip(symbol: "memorychip", tint: .white, title: level == .critical ? "Memory critical" : "Memory pressure high", detail: Self.duration(since: since, now: now))
                 chip.bezelColor = bezel
@@ -98,8 +94,10 @@ final class MacStripView: NSView {
         if quiet {
             views.append(chip(symbol: "circle.fill", tint: dot, title: level, detail: "\(Self.gigabytes(snapshot.memoryUsed)) of \(Self.gigabytes(snapshot.memoryTotal, decimals: 0))"))
         }
-        let growth = snapshot.swapGrowth > 256 * 1024 * 1024 ? "+\(Self.gigabytes(UInt64(snapshot.swapGrowth))) in 5m" : ""
-        views.append(chip(symbol: "externaldrive", tint: .secondaryLabelColor, title: "Swap \(Self.gigabytes(snapshot.swapUsed))", detail: growth))
+        let reading = snapshot.swapInRate >= 1_048_576 ? "reading \(Self.megabytes(snapshot.swapInRate))/s" : nil
+        let growth = snapshot.swapGrowth > 256 * 1024 * 1024 ? "+\(Self.gigabytes(UInt64(snapshot.swapGrowth))) in 5m" : nil
+        let swapDetail = [reading, growth].compactMap { $0 }.joined(separator: " · ")
+        views.append(chip(symbol: "externaldrive", tint: .secondaryLabelColor, title: "Swap \(Self.gigabytes(snapshot.swapUsed))", detail: swapDetail))
         views.append(chip(symbol: "cpu", tint: .secondaryLabelColor, title: "CPU \(Int(snapshot.cpu.rounded()))%", detail: ""))
         return views
     }

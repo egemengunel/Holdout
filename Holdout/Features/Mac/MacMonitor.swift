@@ -15,8 +15,12 @@ final class MacMonitor {
     /// fine. Critical has to hold this long.
     private static let criticalSustain: TimeInterval = 60
     /// Swap-in averaged over a minute. A Mac that feels fine reads back well under 1 MB/s.
-    private static let thrashRate: UInt64 = 20 * 1024 * 1024
-    private static let thrashWindow: TimeInterval = 60
+    /// Swap-in is averaged over this window for display. It isn't an alert: a Mac working
+    /// fine on 8 GB reads back 20+ MB/s under heavy load.
+    private static let swapInWindow: TimeInterval = 60
+    /// An alert that clears and returns within this long is the same alert, so a level
+    /// flickering around a threshold doesn't flash again once seen.
+    private static let alertGrace: TimeInterval = 10 * 60
     /// A heads-up of the same kind flashes at most this often.
     private static let headsUpCooldown: TimeInterval = 30 * 60
     private static let swapWindow: TimeInterval = 5 * 60
@@ -42,6 +46,7 @@ final class MacMonitor {
     private var alertStarts: [String: TimeInterval] = [:]
     private var swapInHistory: [(at: TimeInterval, total: UInt64)] = []
     private var lastAnnounced: [String: TimeInterval] = [:]
+    private var lastActive: [String: TimeInterval] = [:]
 
     func start() {
         sample()
@@ -55,9 +60,9 @@ final class MacMonitor {
         let pressure = SystemSampler.pressure()
         let swap = SystemSampler.swapUsed()
         swapInHistory.append((now, SystemSampler.swappedIn()))
-        swapInHistory.removeAll { now - $0.at > Self.thrashWindow * 2 }
-        let thrashStart = swapInHistory.last { now - $0.at >= Self.thrashWindow }
-        let swapInRate = thrashStart.map { start in
+        swapInHistory.removeAll { now - $0.at > Self.swapInWindow * 2 }
+        let swapInStart = swapInHistory.last { now - $0.at >= Self.swapInWindow }
+        let swapInRate = swapInStart.map { start in
             UInt64(Double(swapInHistory[swapInHistory.count - 1].total &- start.total) / (now - start.at))
         } ?? 0
         let ticks = SystemSampler.cpuTicks()
@@ -85,9 +90,6 @@ final class MacMonitor {
         hotSince = hotSince.filter { name, _ in usages.contains { $0.name == name } }
 
         var alerts: [MacAlert] = []
-        if swapInRate >= Self.thrashRate {
-            alerts.append(.thrashing(bytesPerSecond: swapInRate))
-        }
         if pressure == .critical, let since = elevatedSince, now - since >= Self.criticalSustain {
             alerts.append(.pressure(pressure, since: since))
         }
@@ -98,9 +100,15 @@ final class MacMonitor {
         }
 
         // An alert keeps the time it first appeared, so a new one can be told from an old one.
+        // Starts survive brief gaps (see alertGrace); an alert gone longer is forgotten.
         let started = alerts.filter { alertStarts[$0.key] == nil }
-        alertStarts = alerts.reduce(into: [:]) { starts, alert in
-            starts[alert.key] = alertStarts[alert.key] ?? now
+        for alert in alerts {
+            alertStarts[alert.key] = alertStarts[alert.key] ?? now
+            lastActive[alert.key] = now
+        }
+        for (key, active) in lastActive where now - active > Self.alertGrace {
+            alertStarts[key] = nil
+            lastActive[key] = nil
         }
         newestDistress = alerts.filter { $0.severity == .distress }.compactMap { alertStarts[$0.key] }.max()
         for alert in started where alert.severity == .headsUp && now - (lastAnnounced[alert.key] ?? 0) >= Self.headsUpCooldown {

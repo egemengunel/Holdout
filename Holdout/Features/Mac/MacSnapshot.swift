@@ -29,21 +29,19 @@ enum MacAlert: Equatable {
         case headsUp
     }
 
-    /// Reading swapped-out memory back from disk faster than the Mac can keep up.
-    case thrashing(bytesPerSecond: UInt64)
     case pressure(MemoryPressure, since: TimeInterval)
     case hog(ProcessUsage, since: TimeInterval)
 
     var severity: Severity {
         switch self {
-        case .thrashing, .pressure: .distress
+        case .pressure: .distress
         case .hog: .headsUp
         }
     }
 
     var symbol: String {
         switch self {
-        case .thrashing, .pressure: "memorychip"
+        case .pressure: "memorychip"
         case .hog: "cpu"
         }
     }
@@ -51,7 +49,6 @@ enum MacAlert: Equatable {
     /// Identifies an alert across samples, so its start time survives changing numbers.
     var key: String {
         switch self {
-        case .thrashing: "thrashing"
         case let .pressure(level, _): "pressure-\(level.rawValue)"
         case let .hog(usage, _): "hog-\(usage.name)"
         }
@@ -59,7 +56,7 @@ enum MacAlert: Equatable {
 
     var isMemory: Bool {
         switch self {
-        case .thrashing, .pressure: true
+        case .pressure: true
         case .hog: false
         }
     }
