@@ -206,15 +206,16 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         let celebration = [sessionDone, buildDone].compactMap { $0 }.max { ($0.transient?.startedAt ?? 0) < ($1.transient?.startedAt ?? 0) }
         let failed = latestFailure != nil || unseenMacAlert != nil
         let headsUp = mac.headsUp.flatMap { Date.now.timeIntervalSince1970 - $0.at < IconPulse.headsUpDuration ? $0 : nil }
-        // A heads-up is brief, so it plays over working; a session waiting on you still wins.
+        // Heads-ups and done flashes are brief, so they play over working (a session finishing
+        // while another works still gets its check); a session waiting on you still wins.
+        let flash = headsUp.map { IconPulse.headsUp(at: $0.at, symbol: $0.symbol) } ?? celebration
         statusIcon.show(
             failed ? .alert
                 : waiting ? .waiting
-                : headsUp.map { .headsUp(at: $0.at, symbol: $0.symbol) }
-                ?? (working > 0 ? .working : celebration ?? .idle),
+                : flash ?? (working > 0 ? .working : .idle),
             reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         )
-        statusIcon.setCount(!failed && !waiting && headsUp == nil && working > 0 ? working : nil)
+        statusIcon.setCount(!failed && !waiting && flash == nil && working > 0 ? working : nil)
 
         if isPresented && tab == .agents {
             agentsView.update(visible)
