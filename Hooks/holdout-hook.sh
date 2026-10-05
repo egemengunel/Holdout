@@ -82,6 +82,17 @@ case "$event" in
     ;;
 esac
 
+# Cursor's hooks that fire before a shell or MCP approval prompt. They only add whether
+# the command runs sandboxed, which never asks; the Pre/PostToolUse pair does the rest.
+case "$event" in
+  beforeShellExecution|beforeMCPExecution)
+    [ -s "$file" ] || exit 0
+    printf '%s' "$payload" | /usr/bin/jq -c --argjson previous "$previous" \
+      '$previous + {sandboxed: (.sandbox // false)}' > "$file.tmp" 2>/dev/null && mv -f "$file.tmp" "$file"
+    exit 0
+    ;;
+esac
+
 # __CFBundleIdentifier is the app hosting the session (Claude, Cursor, Terminal, Ghostty…),
 # so Holdout can bring the right window forward.
 printf '%s' "$payload" | /usr/bin/jq -c \
@@ -89,6 +100,13 @@ printf '%s' "$payload" | /usr/bin/jq -c \
   --arg app "${__CFBundleIdentifier:-}" --argjson now "$now" --argjson previous "$previous" '
   (.tool_input // .toolCall.args // {}) as $input
   | (.tool_name // .toolCall.name) as $tool
+  | (if $event == "PostToolUse" and ($tool // "" | test("^(write|edit|multiedit|strreplace|apply_patch|write_file|replace|patch|write_to_file|replace_file_content|multi_replace_file_content)$"; "i"))
+     then if ($input | type) != "object" then []
+          elif $tool == "apply_patch" then
+            [$input.command // "" | tostring | scan("\\*\\*\\* (?:Update|Add) File: ([^\\n]+)") | .[0]]
+          else [$input.file_path // $input.filePath // $input.TargetFile | select(type == "string")]
+          end
+     else [] end) as $edits
   | {
     session: $id,
     agent: $agent,
@@ -108,6 +126,7 @@ printf '%s' "$payload" | /usr/bin/jq -c \
              | if . == null then null else tostring | .[0:120] end),
     notification: (.notification_type | if . == "ToolPermission" then "permission_prompt" else . end),
     app: (if $app == "" then $previous.app else $app end),
+    edited: (($previous.edited // []) - $edits + $edits | .[-50:]),
     updatedAt: $now,
     turnStartedAt: (if $event == "UserPromptSubmit"
                        or (($previous.event // "SessionStart") | IN("SessionStart", "Stop", "Interrupt"))

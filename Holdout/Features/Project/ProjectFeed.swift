@@ -5,18 +5,18 @@
 
 import Foundation
 
-/// What the holdout-bridge mod mirrors from ios-dock and swift-design-lint for one session.
+/// What the holdout-bridge mod mirrors from ios-dock and swift-design-lint for one Claude Code
+/// session, or what `AgentProjectStore` works out for any other agent's session.
 struct ProjectFeed: Decodable {
     struct Repo: Decodable {
         let name: String
+        let root: String?
         let branch: String?
     }
 
     struct Project: Decodable {
         let name: String
-        let architecture: String
-        let deploymentTarget: String?
-        let isSynced: Bool
+        let root: String?
         let branch: String?
     }
 

@@ -33,6 +33,8 @@ struct AgentSession: Decodable, Identifiable {
     let notification: String?
     /// Bundle identifier of the app hosting the session (Claude, Cursor, Terminal, Ghostty…).
     let app: String?
+    /// Files the session's edit tools wrote, oldest first, as the agent named them.
+    let edited: [String]?
     /// Whether Cursor runs the pending Shell command in its sandbox, which never asks you.
     let sandboxed: Bool?
     let updatedAt: TimeInterval
@@ -51,6 +53,9 @@ struct AgentSession: Decodable, Identifiable {
         case let other: other.capitalized
         }
     }
+
+    /// Whether the holdout-bridge mod, which runs inside Claude Code, covers this session.
+    var usesBridge: Bool { agent == nil || agent == "claude" }
 
     var project: String {
         cwd.map { URL(fileURLWithPath: $0).lastPathComponent } ?? agentName

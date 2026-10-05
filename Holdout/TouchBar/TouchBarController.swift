@@ -50,6 +50,7 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
     private let projectView = ProjectStripView()
     private let builds = XcodeBuildWatcher()
     private let feeds = ProjectFeedStore()
+    private let agentProjects = AgentProjectStore()
     private let macView = MacStripView()
     private let mac = MacMonitor()
 
@@ -117,6 +118,7 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         feeds.onChange = { [weak self] in self?.refresh() }
         feeds.isLive = { [weak self] id in self?.sessions.sessions.contains { $0.id == id } ?? true }
         feeds.start()
+        agentProjects.onChange = { [weak self] in self?.refresh() }
 
         // Xcode's debugger puts its own item in the Control Strip's one extra slot whenever it
         // debugs any app. Take the slot back when you switch apps and every few seconds;
@@ -221,6 +223,7 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
             agentsView.update(visible)
         }
         if isPresented && tab == .project {
+            agentProjects.track(Array(sessions.sessions.filter { !$0.usesBridge }.sorted { $0.updatedAt > $1.updatedAt }.prefix(5)))
             failuresSeenUntil = Date.now.timeIntervalSince1970
             let feed = currentFeed
             // With a session open, its own project's Xcode build; otherwise the latest of any.
@@ -233,13 +236,14 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         }
     }
 
-    /// The mods' view of the session you touched most recently. Sessions that have ended
-    /// (their hook file is gone) don't count, even if their feed file is still on disk.
+    /// The feed of the session you touched most recently: the mods' for Claude Code, Holdout's
+    /// own for other agents. Sessions that have ended (their hook file is gone) don't count,
+    /// even if their feed file is still on disk.
     private var currentFeed: ProjectFeed? {
         sessions.sessions
             .sorted { $0.updatedAt > $1.updatedAt }
             .lazy
-            .compactMap { self.feeds.feeds[$0.id] }
+            .compactMap { $0.usesBridge ? self.feeds.feeds[$0.id] : self.agentProjects.feeds[$0.id] }
             .first { $0.hasContent }
     }
 
