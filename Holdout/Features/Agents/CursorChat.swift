@@ -41,7 +41,7 @@ enum CursorChat {
         let element = AXUIElementCreateApplication(app.processIdentifier)
         AXUIElementSetAttributeValue(element, "AXManualAccessibility" as CFString, kCFBooleanTrue)
         var focus: Focus?
-        for _ in 0..<10 {
+        for _ in 0..<30 {
             focus = Focus(in: element)
             if focus?.role != nil { break }
             try? await Task.sleep(for: .milliseconds(100))
