@@ -9,6 +9,7 @@ Holdout is a personal macOS menu bar app (AppKit, no windows) for the 13" M2 Mac
 ```bash
 xcodebuild -project Holdout.xcodeproj -scheme Holdout build
 claude plugin validate Mods/holdout-bridge
+Hooks/install.sh            # register the agent hook with every agent found (or name them)
 ```
 
 There are no tests. Run from Xcode with ⌘R; the shared scheme has **Debug executable off** on purpose, because Xcode's debugger takes over the Control Strip slot.
@@ -34,7 +35,9 @@ MV: models are value types, stores own and watch state, each tab is an AppKit st
 
 All of it lands in `~/Library/Application Support/Holdout/`:
 
-- `sessions/<session>.json`: written by `Hooks/holdout-hook.sh`, a Claude Code hook registered for SessionStart, UserPromptSubmit, Pre/PostToolUse, Notification, Stop and SessionEnd in `~/.claude/settings.json`. It must print nothing and always exit 0. It writes atomically by rename, so `SessionStore` uses a directory `DispatchSource`. SessionEnd deletes the file; the Claude desktop app only ends a session when its chat is deleted, so "file present" means "chat still exists".
+- `sessions/<session>.json`: written by `Hooks/holdout-hook.sh [agent] [event]`, registered by `Hooks/install.sh` in `~/.claude/settings.json`, `~/.codex/hooks.json`, `~/.gemini/settings.json` (Gemini CLI), `~/.gemini/config/hooks.json` (Antigravity), and via the `Hooks/opencode/holdout.js` plugin for OpenCode, which has no command hooks. It translates every agent's events to Claude Code's names (SessionStart, UserPromptSubmit, Pre/PostToolUse, Notification, PermissionRequest, Stop, SessionEnd, plus Interrupt for a cancelled turn), which is all `AgentSession` reads, and records `agent`. It must never block: always exit 0 and print nothing, except `{}` for Gemini and Antigravity, which parse stdout as JSON. It writes atomically by rename, so `SessionStore` uses a directory `DispatchSource`. SessionEnd deletes the file; the Claude desktop app only ends a session when its chat is deleted, so "file present" means "chat still exists".
+  - Cursor runs the hooks in `~/.claude/settings.json` itself, with its own camelCase names (`beforeSubmitPrompt`, `stop` with `status`…), `workspace_roots` instead of `cwd`, and `cursor_version`, which is how the hook tells it apart. Its subagents report under their own id with `parent_tool_call_id` and are skipped. It also fires `sessionStart` for empty draft chats, which is why SessionStart must stay idle. It has no approval-prompt hook, so Cursor sessions never show "needs you".
+  - Antigravity's payloads are camelCase and name no event, so each registration passes it. Holdout doesn't register its `PreToolUse`: the reply must be a permission decision. On current builds only the `agy` CLI runs hooks, not the IDE or desktop app. Codex skips new hooks until trusted in `/hooks`.
 - `feeds/<session>.json`: written by the `Mods/holdout-bridge` Claude Code mod (loaded via `CLAUDE_CODE_PLUGIN_DIRS`), which mirrors the user's `ios-dock` and `swift-design-lint` mods' `$.state` every 2 s. Mods write in place, so `ProjectFeedStore` polls modification dates. The Project tab shows the feed of the live session (per `SessionStore`) touched most recently. `ios-dock`'s build result has no timestamp, so the bridge adds `buildAt` (when it last changed) to compare it with Xcode's own builds.
 - `commands/<session>.json`: written by Holdout's Project tab buttons; the bridge picks each command up once (by `id`) and submits the matching prompt, kept in step with `ios-dock`'s `ACTIONS`.
 - Xcode builds come from `~/Library/Developer/Xcode/DerivedData/*/Logs/Build/LogStoreManifest.plist`, polled by `XcodeBuildWatcher`.
