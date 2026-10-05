@@ -71,6 +71,17 @@ now=$(date +%s)
 previous=$(/usr/bin/jq -c . "$file" 2>/dev/null) || previous='{}'
 [ -n "$previous" ] || previous='{}'
 
+# Cursor's hooks that fire before a shell or MCP approval prompt. They only add whether
+# the command runs sandboxed, which never asks; the Pre/PostToolUse pair does the rest.
+case "$event" in
+  beforeShellExecution|beforeMCPExecution)
+    [ -s "$file" ] || exit 0
+    printf '%s' "$payload" | /usr/bin/jq -c --argjson previous "$previous" \
+      '$previous + {sandboxed: (.sandbox // false)}' > "$file.tmp" 2>/dev/null && mv -f "$file.tmp" "$file"
+    exit 0
+    ;;
+esac
+
 # __CFBundleIdentifier is the app hosting the session (Claude, Cursor, Terminal, Ghostty…),
 # so Holdout can bring the right window forward.
 printf '%s' "$payload" | /usr/bin/jq -c \

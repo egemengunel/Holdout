@@ -47,17 +47,19 @@ install_claude() {
 }
 
 # Cursor also runs the hooks in ~/.claude/settings.json (Settings > Hooks > third-party
-# hooks), so a native registration is only needed without Claude Code.
+# hooks), so the native registration only needs the events Claude Code has no name for:
+# the shell and MCP hooks that fire before an approval prompt. Without Claude Code it
+# registers everything.
 install_cursor() {
   echo "Cursor"
+  events='["sessionStart","beforeSubmitPrompt","preToolUse","postToolUse","postToolUseFailure","stop","sessionEnd","beforeShellExecution","beforeMCPExecution"]'
   if [ -f "$HOME/.claude/settings.json" ] && grep -q holdout-hook.sh "$HOME/.claude/settings.json"; then
-    echo "  uses the Claude Code hooks; nothing to add"
-    return
+    events='["beforeShellExecution","beforeMCPExecution"]'
   fi
-  update "$HOME/.cursor/hooks.json" --arg command "$quoted cursor" '
+  update "$HOME/.cursor/hooks.json" --arg command "$quoted cursor" --argjson events "$events" '
     .version //= 1
     | .hooks //= {}
-    | reduce ("sessionStart","beforeSubmitPrompt","preToolUse","postToolUse","postToolUseFailure","stop","sessionEnd") as $event (.;
+    | reduce $events[] as $event (.;
         .hooks[$event] = ([.hooks[$event][]? | select(.command | tostring | contains("holdout-hook.sh") | not)]
                           + [{command: $command, timeout: 5}]))'
 }

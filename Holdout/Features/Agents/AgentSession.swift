@@ -33,6 +33,8 @@ struct AgentSession: Decodable, Identifiable {
     let notification: String?
     /// Bundle identifier of the app hosting the session (Claude, Cursor, Terminal, Ghostty…).
     let app: String?
+    /// Whether Cursor runs the pending Shell command in its sandbox, which never asks you.
+    let sandboxed: Bool?
     let updatedAt: TimeInterval
     let turnStartedAt: TimeInterval
 
@@ -57,7 +59,7 @@ struct AgentSession: Decodable, Identifiable {
     var state: State {
         switch event {
         case "PreToolUse":
-            .tool(name: tool ?? "Tool", detail: detail)
+            isAwaitingApproval ? .waiting : .tool(name: tool ?? "Tool", detail: detail)
         case "PermissionRequest":
             .waiting
         case "Notification":
@@ -69,6 +71,14 @@ struct AgentSession: Decodable, Identifiable {
         default:
             .thinking
         }
+    }
+
+    /// Cursor has no hook for its approval prompt, but `preToolUse` fires before the prompt
+    /// and `postToolUse` only after the user answers, so a command that hasn't returned
+    /// for a few seconds may be waiting on you. Long builds trip it too.
+    private var isAwaitingApproval: Bool {
+        guard agent == "cursor", sandboxed != true, let tool, tool == "Shell" || tool.localizedCaseInsensitiveContains("mcp") else { return false }
+        return Date.now.timeIntervalSince1970 - updatedAt > 8
     }
 
     private var needsAttention: Bool {
