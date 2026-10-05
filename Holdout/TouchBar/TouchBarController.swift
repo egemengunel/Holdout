@@ -282,6 +282,18 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
                 write(["id": UUID().uuidString, "prompt": prompt, "at": Int(Date.now.timeIntervalSince1970)], for: session)
                 projectView.note("Queued for when \(session.agentName) finishes")
                 refresh()
+            } else if session.agent == "cursor", let bundleID = session.app {
+                projectView.note("Sending to Cursor…")
+                Task {
+                    switch await CursorChat.send(prompt, bundleID: bundleID) {
+                    case .sent:
+                        closeStrip()
+                    case .needsAccessibility:
+                        copyToClipboard(prompt, note: "Allow Holdout in Privacy > Accessibility, then press again. Copied for now")
+                    case .focusNotInChat:
+                        copyToClipboard(prompt, note: "Click into the chat and paste: copied")
+                    }
+                }
             } else {
                 copyToClipboard(prompt, note: "Copied: paste it into \(session.agentName)")
                 focus(session)
