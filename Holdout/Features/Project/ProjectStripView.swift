@@ -27,6 +27,30 @@ final class ProjectStripView: NSView {
             case .commit: "checkmark.circle"
             }
         }
+
+        /// The prompt for agents the holdout-bridge mod doesn't cover, kept in step with
+        /// ios-dock's ACTIONS (the bridge sends those itself).
+        func prompt(project: ProjectFeed.Project?, repo: ProjectFeed.Repo?) -> String? {
+            let lines: [String]? = switch self {
+            case .build: project.map { p in [
+                "holdout: the user pressed Build on the Touch Bar for \(p.name).",
+                "Build the Xcode project in \(p.root ?? p.name) (through the Xcode MCP if you have it, otherwise xcodebuild), then list its warnings.",
+                "If it fails, fix the errors and build again until it is clean. Report the warnings at the end.",
+            ] }
+            case .lint: project.map { p in [
+                "holdout: the user pressed Design lint & fix on the Touch Bar for \(p.name).",
+                "In \(p.root ?? p.name), list the Swift files changed on this branch against the default branch, plus uncommitted ones.",
+                "Check each against the project's CLAUDE.md design-system and architecture rules (typography, icons, colors, buttons, MV vs MVVM and so on).",
+                "Fix the violations, touching only the offending lines, then build once to confirm it compiles. Summarize what you changed and anything you left on purpose.",
+            ] }
+            case .commit: repo.map { r in [
+                "holdout: the user pressed Review & commit on the Touch Bar for \(r.name).",
+                "In \(r.root ?? r.name), review the uncommitted changes for bugs and leftovers, then propose an atomic commit grouping with messages.",
+                "Do not commit yet: wait for the user to approve the grouping in their next message.",
+            ] }
+            }
+            return lines?.joined(separator: "\n\n")
+        }
     }
 
     var onCommand: ((Action) -> Void)?
@@ -36,6 +60,9 @@ final class ProjectStripView: NSView {
     private let stack = NSStackView()
     private let scrollView = NSScrollView()
     private let emptyLabel = NSTextField(labelWithString: "No builds yet")
+    /// Says where a button's prompt went when it couldn't go straight into the session.
+    private let noteLabel = NSTextField(labelWithString: "")
+    private var noteResetTask: Task<Void, Never>?
     private var build: XcodeBuild?
     private var actions: [Action] = []
     /// [ Build | Lint | Commit ] as one control, like the tabs and the Sim stepper.
@@ -56,6 +83,7 @@ final class ProjectStripView: NSView {
 
         emptyLabel.textColor = .secondaryLabelColor
         emptyLabel.translatesAutoresizingMaskIntoConstraints = false
+        noteLabel.textColor = .secondaryLabelColor
 
         addSubview(scrollView)
         addSubview(emptyLabel)
@@ -86,6 +114,9 @@ final class ProjectStripView: NSView {
             views += news(xcodeBuild: xcodeBuild, feed: feed, now: now)
             if let control = actionsControl(feed) {
                 views.append(control)
+            }
+            if !noteLabel.stringValue.isEmpty {
+                views.append(noteLabel)
             }
         } else if let xcodeBuild {
             // No Claude session in a project: just Xcode's latest build, named.
@@ -154,6 +185,17 @@ final class ProjectStripView: NSView {
             actionControl.setWidth(0, forSegment: segment)
         }
         return actionControl
+    }
+
+    /// Shown after the actions for a few seconds; the owner's next update draws it.
+    func note(_ text: String) {
+        noteLabel.stringValue = text
+        noteResetTask?.cancel()
+        noteResetTask = Task {
+            try? await Task.sleep(for: .seconds(4))
+            guard !Task.isCancelled else { return }
+            noteLabel.stringValue = ""
+        }
     }
 
     @objc private func runAction() {

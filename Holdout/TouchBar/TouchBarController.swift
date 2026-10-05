@@ -4,6 +4,7 @@
 //
 
 import AppKit
+import OSLog
 
 /// Owns the Holdout icon in the Control Strip and the full-width strip it opens.
 @MainActor
@@ -30,6 +31,7 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         }
     }
 
+    private static let log = Logger(subsystem: "com.egemen.Holdout", category: "project")
     static let controlStripID = NSTouchBarItem.Identifier("com.egemen.Holdout.controlStrip")
     private static let tabsID = NSTouchBarItem.Identifier("com.egemen.Holdout.tabs")
     private static let contentID = NSTouchBarItem.Identifier("com.egemen.Holdout.content")
@@ -247,17 +249,57 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
             .first { $0.hasContent }
     }
 
-    /// Hands a Touch Bar button press to the holdout-bridge mod in the current session,
-    /// which submits it as a prompt, then brings that session forward.
+    /// Hands a Touch Bar button press to the current session as a prompt, the way that agent
+    /// takes one: Claude Code through the holdout-bridge mod, OpenCode through its plugin,
+    /// and the others (Cursor included) at the end of the turn they're on, in that same
+    /// chat, or on the clipboard when they're idle.
     private func send(_ action: ProjectStripView.Action) {
-        guard let feed = currentFeed else { return }
-        let command = ["id": UUID().uuidString, "action": action.rawValue]
-        let url = URL.applicationSupportDirectory.appending(path: "Holdout/commands/\(feed.session).json")
-        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try? JSONEncoder().encode(command).write(to: url, options: .atomic)
-        if let session = sessions.sessions.first(where: { $0.id == feed.session }) {
-            focus(session)
+        Self.log.info("pressed \(action.rawValue, privacy: .public)")
+        guard let feed = currentFeed,
+              let session = sessions.sessions.first(where: { $0.id == feed.session })
+        else {
+            Self.log.error("\(action.rawValue, privacy: .public): no session with a project feed")
+            return
         }
+        Self.log.info("\(action.rawValue, privacy: .public) for \(session.agentName, privacy: .public) \(session.id, privacy: .public), \(session.state.isWorking ? "working" : "idle", privacy: .public)")
+
+        if session.usesBridge {
+            write(["id": UUID().uuidString, "action": action.rawValue], for: session)
+            focus(session)
+            return
+        }
+        guard let prompt = action.prompt(project: feed.project, repo: feed.repo) else {
+            Self.log.error("\(action.rawValue, privacy: .public): no prompt for this project")
+            return
+        }
+
+        switch session.agent {
+        case "opencode":
+            write(["id": UUID().uuidString, "prompt": prompt], for: session)
+            focus(session)
+        default:
+            if session.state.isWorking {
+                write(["id": UUID().uuidString, "prompt": prompt, "at": Int(Date.now.timeIntervalSince1970)], for: session)
+                projectView.note("Queued for when \(session.agentName) finishes")
+                refresh()
+            } else {
+                copyToClipboard(prompt, note: "Copied: paste it into \(session.agentName)")
+                focus(session)
+            }
+        }
+    }
+
+    private func copyToClipboard(_ prompt: String, note: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(prompt, forType: .string)
+        projectView.note(note)
+        refresh()
+    }
+
+    private func write(_ command: [String: Any], for session: AgentSession) {
+        let url = URL.applicationSupportDirectory.appending(path: "Holdout/commands/\(session.id).json")
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? JSONSerialization.data(withJSONObject: command).write(to: url, options: .atomic)
     }
 
     /// While the strip is open it owns the bar; closing it reclaims the slot itself.

@@ -1,7 +1,8 @@
 #!/bin/sh
 # Holdout's agent hook. Records each session's latest state as a small JSON file
-# that Holdout.app watches. It never blocks or changes what an agent does: it always
-# exits 0 and prints nothing, except `{}` for agents that require JSON on stdout.
+# that Holdout.app watches. It never blocks: it always exits 0 and prints nothing,
+# except `{}` for agents that require JSON on stdout, and a Touch Bar button's prompt
+# (see below) when a turn ends.
 #
 # Usage: holdout-hook.sh [agent] [event]
 #   agent: claude (default), cursor, codex, gemini, antigravity, opencode
@@ -13,9 +14,11 @@
 
 agent=${1:-}
 event_arg=${2:-}
+reply=
 case "$agent" in
-  gemini|antigravity) trap 'printf "{}"' EXIT ;;
+  gemini|antigravity) reply='{}' ;;
 esac
+trap 'printf "%s" "$reply"' EXIT
 
 dir="$HOME/Library/Application Support/Holdout/sessions"
 mkdir -p "$dir" || exit 0
@@ -82,16 +85,40 @@ case "$event" in
     ;;
 esac
 
-# Cursor's hooks that fire before a shell or MCP approval prompt. They only add whether
-# the command runs sandboxed, which never asks; the Pre/PostToolUse pair does the rest.
-case "$event" in
-  beforeShellExecution|beforeMCPExecution)
-    [ -s "$file" ] || exit 0
-    printf '%s' "$payload" | /usr/bin/jq -c --argjson previous "$previous" \
-      '$previous + {sandboxed: (.sandbox // false)}' > "$file.tmp" 2>/dev/null && mv -f "$file.tmp" "$file"
-    exit 0
-    ;;
-esac
+# A Touch Bar button pressed while Codex, Gemini or Antigravity was working leaves its
+# prompt in commands/<session>.json; it becomes the agent's next step when the turn ends.
+command="$HOME/Library/Application Support/Holdout/commands/$id.json"
+# Cursor runs this hook once per registration (here and in ~/.claude/settings.json) and
+# merges the replies, so its command stays, stamped with the Stop's `loop_count`, for every
+# copy of that Stop to answer alike; the follow-up turn's own Stop (the next count) deletes it.
+# A stamp older than a minute is a prompt Cursor never ran.
+if [ "$event" = Stop ] && [ -s "$command" ]; then
+  loop=$(printf '%s' "$payload" | /usr/bin/jq -r '.loop_count // 0' 2>/dev/null)
+  case "$loop" in ''|*[!0-9]*) loop=0 ;; esac
+  prompt=$(/usr/bin/jq -r --argjson now "$now" --argjson loop "$loop" \
+    'select($now - (.at // 0) < 1800 and (.sentLoop // $loop) == $loop and (.sentAt // $now) + 60 >= $now) | .prompt // empty' "$command" 2>/dev/null)
+  if [ -n "$prompt" ]; then
+    case "$agent" in
+      codex) reply=$(/usr/bin/jq -cn --arg prompt "$prompt" '{decision: "block", reason: $prompt}') ;;
+      gemini) reply=$(/usr/bin/jq -cn --arg prompt "$prompt" '{decision: "deny", reason: $prompt}') ;;
+      antigravity) reply=$(/usr/bin/jq -cn --arg prompt "$prompt" '{decision: "continue", reason: $prompt}') ;;
+      cursor)
+        if printf '%s' "$payload" | /usr/bin/jq -e '.status == "completed"' >/dev/null 2>&1; then
+          reply=$(/usr/bin/jq -cn --arg prompt "$prompt" '{followup_message: $prompt}')
+          /usr/bin/jq -c --argjson loop "$loop" --argjson now "$now" '.sentLoop //= $loop | .sentAt //= $now' "$command" > "$command.$$" 2>/dev/null &&
+            mv -f "$command.$$" "$command"
+        fi
+        ;;
+    esac
+    if [ -n "$reply" ] && [ "$reply" != '{}' ]; then
+      [ "$agent" = cursor ] || rm -f "$command"
+      event=UserPromptSubmit
+    fi
+  else
+    # An answered Cursor command, once the Stop that sent it is over.
+    /usr/bin/jq -e 'has("sentLoop")' "$command" >/dev/null 2>&1 && rm -f "$command"
+  fi
+fi
 
 # __CFBundleIdentifier is the app hosting the session (Claude, Cursor, Terminal, Ghostty…),
 # so Holdout can bring the right window forward.
