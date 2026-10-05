@@ -74,8 +74,14 @@ struct AgentSession: Decodable, Identifiable {
         case "SessionStart", "Interrupt":
             .idle
         default:
-            .thinking
+            isStale ? .idle : .thinking
         }
+    }
+
+    /// Cursor fires no `stop` for a turn that a background task's notification started, so
+    /// its last event stays a tool result or prompt forever. A turn silent this long is over.
+    private var isStale: Bool {
+        agent == "cursor" && Date.now.timeIntervalSince1970 - updatedAt > 120
     }
 
     /// Cursor has no hook for its approval prompt, but `preToolUse` fires before the prompt
