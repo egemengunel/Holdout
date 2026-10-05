@@ -295,7 +295,7 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         return content.debugDescriptionForLayout + "\n" + walk(content, 0).joined(separator: "\n")
     }
 
-    private func focus(_ session: ClaudeSession) {
+    private func focus(_ session: AgentSession) {
         // A background app's `activate()` is ignored since macOS 14; opening the app through
         // Launch Services brings it forward the way the Dock does.
         if let bundleID = session.app,

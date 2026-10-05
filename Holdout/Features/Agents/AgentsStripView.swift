@@ -5,14 +5,14 @@
 
 import AppKit
 
-/// The Agents tab: one pill per Claude Code session, scrolling sideways when there are many.
+/// The Agents tab: one pill per agent session, scrolling sideways when there are many.
 final class AgentsStripView: NSView {
-    var onSelect: ((ClaudeSession) -> Void)?
+    var onSelect: ((AgentSession) -> Void)?
 
     private let stack = NSStackView()
     private let scrollView = NSScrollView()
-    private let emptyLabel = NSTextField(labelWithString: "No Claude Code sessions active")
-    private var shown: [ClaudeSession] = []
+    private let emptyLabel = NSTextField(labelWithString: "No agent sessions active")
+    private var shown: [AgentSession] = []
 
     private static let font = NSFont.systemFont(ofSize: 14)
     private static let waitingBezel = NSColor(srgbRed: 0.40, green: 0.24, blue: 0.02, alpha: 1)
@@ -51,17 +51,20 @@ final class AgentsStripView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
-    func update(_ sessions: [ClaudeSession], now: Date = .now) {
+    func update(_ sessions: [AgentSession], now: Date = .now) {
         shown = sessions
         emptyLabel.isHidden = !sessions.isEmpty
         stack.setViews(sessions.enumerated().map { pill(for: $1, tag: $0, now: now) }, in: .leading)
     }
 
-    private func pill(for session: ClaudeSession, tag: Int, now: Date) -> NSButton {
+    private func pill(for session: AgentSession, tag: Int, now: Date) -> NSButton {
         let (dotColor, status) = Self.describe(session.state)
         let title = NSMutableAttributedString()
         title.append(NSAttributedString(string: "● ", attributes: [.foregroundColor: dotColor, .font: Self.font]))
         title.append(NSAttributedString(string: session.project, attributes: [.foregroundColor: NSColor.labelColor, .font: Self.font]))
+        if session.project != session.agentName {
+            title.append(NSAttributedString(string: " " + session.agentName, attributes: [.foregroundColor: NSColor.tertiaryLabelColor, .font: Self.font]))
+        }
         title.append(NSAttributedString(string: "  " + status, attributes: [.foregroundColor: NSColor.secondaryLabelColor, .font: Self.font]))
         if session.state.isWorking {
             let elapsed = Self.elapsed(since: session.turnStartedAt, now: now)
@@ -80,7 +83,7 @@ final class AgentsStripView: NSView {
         onSelect?(shown[sender.tag])
     }
 
-    private static func describe(_ state: ClaudeSession.State) -> (NSColor, String) {
+    private static func describe(_ state: AgentSession.State) -> (NSColor, String) {
         switch state {
         case .waiting: (.systemOrange, "needs you")
         case .thinking: (.systemBlue, "thinking")

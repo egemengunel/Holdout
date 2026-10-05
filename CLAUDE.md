@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Holdout is a personal macOS menu bar app (AppKit, no windows) for the 13" M2 MacBook Pro Touch Bar. It puts an icon in the Control Strip that opens a system-wide strip with four tabs: Agents (Claude Code sessions), Sim (iOS Simulator controls), Project (Xcode builds and Claude Code mod state), and Mac (a memory and CPU watchdog).
+Holdout is a personal macOS menu bar app (AppKit, no windows) for the 13" M2 MacBook Pro Touch Bar. It puts an icon in the Control Strip that opens a system-wide strip with four tabs: Agents (coding agent sessions: Claude Code, Cursor, Codex, Gemini CLI, Antigravity, OpenCode), Sim (iOS Simulator controls), Project (Xcode builds and Claude Code mod state), and Mac (a memory and CPU watchdog).
 
 ## Build and run
 

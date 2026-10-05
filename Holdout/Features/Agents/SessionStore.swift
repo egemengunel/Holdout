@@ -16,7 +16,7 @@ final class SessionStore {
     private static let deleteAfter: TimeInterval = 24 * 60 * 60
 
     var onChange: (() -> Void)?
-    private(set) var sessions: [ClaudeSession] = []
+    private(set) var sessions: [AgentSession] = []
     private var watcher: DispatchSourceFileSystemObject?
 
     func start() {
@@ -42,7 +42,7 @@ final class SessionStore {
 
         sessions = files.filter { $0.pathExtension == "json" }.compactMap { url in
             guard let data = try? Data(contentsOf: url),
-                  let session = try? JSONDecoder().decode(ClaudeSession.self, from: data)
+                  let session = try? JSONDecoder().decode(AgentSession.self, from: data)
             else { return nil }
 
             if now - session.updatedAt > Self.deleteAfter {
@@ -56,7 +56,7 @@ final class SessionStore {
 
     /// Sessions worth showing: waiting on you, working, or finished within the last minute.
     /// Waiting sessions come first, then oldest turn first.
-    func visible(at now: Date = .now) -> [ClaudeSession] {
+    func visible(at now: Date = .now) -> [AgentSession] {
         let now = now.timeIntervalSince1970
         return sessions
             .filter { session in

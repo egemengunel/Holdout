@@ -1,12 +1,13 @@
 //
-//  ClaudeSession.swift
+//  AgentSession.swift
 //  Holdout
 //
 
 import Foundation
 
-/// The latest state of one Claude Code session, as written by `Hooks/holdout-hook.sh`.
-struct ClaudeSession: Decodable, Identifiable {
+/// The latest state of one coding agent session, as written by `Hooks/holdout-hook.sh`,
+/// which translates every agent's events to Claude Code's names.
+struct AgentSession: Decodable, Identifiable {
     enum State: Equatable {
         case idle
         case thinking
@@ -23,20 +24,34 @@ struct ClaudeSession: Decodable, Identifiable {
     }
 
     let session: String
+    /// Which agent runs the session (`claude`, `cursor`, `codex`…); nil from older hooks.
+    let agent: String?
     let event: String
     let cwd: String?
     let tool: String?
     let detail: String?
     let notification: String?
-    /// Bundle identifier of the app hosting the session (Claude, Terminal, Ghostty…).
+    /// Bundle identifier of the app hosting the session (Claude, Cursor, Terminal, Ghostty…).
     let app: String?
     let updatedAt: TimeInterval
     let turnStartedAt: TimeInterval
 
     var id: String { session }
 
+    var agentName: String {
+        switch agent ?? "claude" {
+        case "claude": "Claude"
+        case "cursor": "Cursor"
+        case "codex": "Codex"
+        case "gemini": "Gemini"
+        case "antigravity": "Antigravity"
+        case "opencode": "OpenCode"
+        case let other: other.capitalized
+        }
+    }
+
     var project: String {
-        cwd.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "Claude"
+        cwd.map { URL(fileURLWithPath: $0).lastPathComponent } ?? agentName
     }
 
     var state: State {
@@ -49,7 +64,7 @@ struct ClaudeSession: Decodable, Identifiable {
             needsAttention ? .waiting : .idle
         case "Stop":
             .done
-        case "SessionStart":
+        case "SessionStart", "Interrupt":
             .idle
         default:
             .thinking
