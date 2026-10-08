@@ -205,21 +205,22 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
 
         // Only while its flash is still playing; done sessions stay listed far longer.
         let now = Date.now.timeIntervalSince1970
-        let sessionDone = visible.filter { $0.state == .done }.map(\.updatedAt).max()
+        let sessionDone = !HoldoutSettings.isOn(HoldoutSettings.Key.sessionDone) ? nil : visible.filter { $0.state == .done }.map(\.updatedAt).max()
             .flatMap { now - $0 < IconPulse.doneDuration ? IconPulse.done(at: $0) : nil }
-        let buildDone = buildSucceededAt
+        let buildFlashes = HoldoutSettings.isOn(HoldoutSettings.Key.buildResult)
+        let buildDone = (buildFlashes ? buildSucceededAt : nil)
             .flatMap { now - $0 < IconPulse.doneDuration ? IconPulse.done(at: $0, symbol: "hammer.fill") : nil }
         // Whichever finished last gets the flash.
         let celebration = [sessionDone, buildDone].compactMap { $0 }.max { ($0.transient?.startedAt ?? 0) < ($1.transient?.startedAt ?? 0) }
-        let failed = unseenMacAlert != nil
+        let failed = unseenMacAlert != nil && HoldoutSettings.isOn(HoldoutSettings.Key.macDistress)
         // A failed build flashes once, from when Holdout notices it, then clears like the rest.
         if let failure = newestFailure, failure > lastFailureFlashed {
             lastFailureFlashed = failure
             buildFailedAt = now
         }
-        let buildFailed = buildFailedAt
+        let buildFailed = (buildFlashes ? buildFailedAt : nil)
             .flatMap { now - $0 < IconPulse.doneDuration ? IconPulse.done(at: $0, symbol: "hammer.fill", isFailure: true) : nil }
-        let headsUp = mac.headsUp.flatMap { Date.now.timeIntervalSince1970 - $0.at < IconPulse.headsUpDuration ? $0 : nil }
+        let headsUp = (HoldoutSettings.isOn(HoldoutSettings.Key.cpuHeadsUp) ? mac.headsUp : nil).flatMap { Date.now.timeIntervalSince1970 - $0.at < IconPulse.headsUpDuration ? $0 : nil }
         // Heads-ups and done flashes are brief, so they play over working (a session finishing
         // while another works still gets its check); a session waiting on you still wins.
         let flash = headsUp.map { IconPulse.headsUp(at: $0.at, symbol: $0.symbol) } ?? celebration

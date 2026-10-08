@@ -3,10 +3,13 @@
 #
 #   Hooks/install.sh                  every agent found on this Mac
 #   Hooks/install.sh codex gemini     just these (claude cursor codex gemini antigravity opencode)
+#   Hooks/install.sh --remove [agent...]   take Holdout's entries back out
 #
 # Safe to re-run: earlier Holdout entries are replaced, everything else is kept.
 
 set -u
+remove=0
+[ "${1:-}" = "--remove" ] && { remove=1; shift; }
 hooks_dir=$(cd "$(dirname "$0")" && pwd)
 hook="$hooks_dir/holdout-hook.sh"
 quoted="\"$hook\""
@@ -107,6 +110,38 @@ if [ $# -eq 0 ]; then
   { [ -d "$HOME/.config/opencode" ] || has opencode; } && set -- "$@" opencode
 fi
 [ $# -gt 0 ] || { echo "No supported agents found."; exit 0; }
+
+# Removal: drop every entry that runs holdout-hook.sh, and any group left empty.
+unregister() {
+  file=$1
+  [ -s "$file" ] || return 0
+  update "$file" '
+    def mine: tostring | contains("holdout-hook.sh");
+    if .hooks then
+      .hooks |= (with_entries(.value |= (map(if .hooks then (.hooks |= map(select(.command | mine | not))) | select(.hooks | length > 0)
+                                             else select(.command | mine | not) end)))
+                 | with_entries(select(.value | length > 0)))
+    else . end
+    | del(.holdout)'
+}
+
+remove_agent() {
+  case "$1" in
+    claude) unregister "$HOME/.claude/settings.json" ;;
+    cursor) unregister "$HOME/.cursor/hooks.json" ;;
+    codex) unregister "$HOME/.codex/hooks.json" ;;
+    gemini) unregister "$HOME/.gemini/settings.json" ;;
+    antigravity) unregister "$HOME/.gemini/config/hooks.json" ;;
+    opencode) rm -f "$HOME/.config/opencode/plugins/holdout.js"; echo "  removed OpenCode plugin" ;;
+    *) echo "Unknown agent: $1" >&2 ;;
+  esac
+}
+
+if [ "$remove" = 1 ]; then
+  [ $# -gt 0 ] || set -- claude cursor codex gemini antigravity opencode
+  for agent in "$@"; do remove_agent "$agent"; done
+  exit 0
+fi
 
 for agent in "$@"; do
   case "$agent" in

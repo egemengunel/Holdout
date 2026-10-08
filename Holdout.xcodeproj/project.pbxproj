@@ -53,6 +53,7 @@
 				08A3A77B3072B8F000606D4E /* Sources */,
 				08A3A77C3072B8F000606D4E /* Frameworks */,
 				08A3A77D3072B8F000606D4E /* Resources */,
+				08A3A7A03072B8F000606D4E /* Bundle Hooks and Bridge */,
 			);
 			buildRules = (
 			);
@@ -106,6 +107,28 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		08A3A7A03072B8F000606D4E /* Bundle Hooks and Bridge */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Bundle Hooks and Bridge";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "runtime=\"$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Resources/Runtime\"\nrm -rf \"$runtime\"\nmkdir -p \"$runtime\"\nrsync -a --exclude .DS_Store \"$SRCROOT/Hooks\" \"$SRCROOT/Mods/holdout-bridge\" \"$runtime/\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		08A3A77B3072B8F000606D4E /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -153,7 +176,7 @@
 				DEVELOPMENT_TEAM = 72PVD779C5;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -217,7 +240,7 @@
 				DEVELOPMENT_TEAM = 72PVD779C5;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;

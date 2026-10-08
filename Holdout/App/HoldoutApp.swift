@@ -15,11 +15,16 @@ struct HoldoutApp: App {
         // Holdout is a background app (LSUIElement): no Dock icon and no window, so it's
         // almost never frontmost and the system always draws the strip's native ✕.
         MenuBarExtra {
+            SettingsLink { Text("Settings…") }
+                .keyboardShortcut(",")
+                .simultaneousGesture(TapGesture().onEnded { NSApp.activate() })
+            Divider()
             Button("Quit Holdout") { NSApp.terminate(nil) }
                 .keyboardShortcut("q")
         } label: {
             Image(nsImage: Self.menuBarIcon)
         }
+        Settings { SettingsView() }
     }
 
     /// `systemImage:` draws the symbol smaller than other menu bar items; this matches their size.
@@ -35,6 +40,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let touchBar = TouchBarController()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        HoldoutSettings.registerDefaults()
+        Task { await AgentInstaller.refreshIfInstalled() }
         if touchBar.install() {
             print("Holdout: Control Strip item installed")
         } else {

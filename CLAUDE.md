@@ -49,6 +49,10 @@ The bridge's `types/index.d.ts` copies the slices of the other mods' state contr
 
 `Features/Simulator/Simulator` shells out to `xcrun simctl` (via `Shared/Shell`). Xcode 27 replaced Simulator.app with DeviceHub.app (`com.apple.dt.Devices`); both bundle IDs are tried when bringing it forward.
 
+### Settings and distribution
+
+`Features/Settings` is a SwiftUI `Settings` scene opened from the menu bar item (General: Open at Login via `SMAppService`; Agents: connect/remove per agent; Alerts: toggles read by `TouchBarController.refresh` through `HoldoutSettings`; About). A Run Script build phase copies `Hooks/` and `Mods/holdout-bridge` into the app's `Resources/Runtime`; `AgentInstaller` rsyncs that to `~/Library/Application Support/Holdout/runtime` (stable paths for agents' configs, refreshed at launch) and runs `install.sh [--remove] <agent>` from there. User script sandboxing is off for that phase. Adding a setting: key in `HoldoutSettings.Key`, default in `registerDefaults`, toggle in `AlertSettings`.
+
 ## Conventions
 
 - Tabs show news, not placeholders: a chip appears only when it has something to say (the Project tab drops "no build yet"-style chips, puts failures first, and groups actions in one segmented control).
