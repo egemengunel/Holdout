@@ -191,11 +191,11 @@ final class ProjectStripView: NSView {
     }
 
     /// Shown after the actions for a few seconds; the owner's next update draws it.
-    func note(_ text: String) {
+    func note(_ text: String, for seconds: Double = 4) {
         noteLabel.stringValue = text
         noteResetTask?.cancel()
         noteResetTask = Task {
-            try? await Task.sleep(for: .seconds(4))
+            try? await Task.sleep(for: .seconds(seconds))
             guard !Task.isCancelled else { return }
             noteLabel.stringValue = ""
         }

@@ -285,8 +285,7 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         }
 
         if HoldoutSettings.delivery(for: session.agent ?? "claude") == .clipboard {
-            copyToClipboard(prompt, note: "Copied: paste it into \(session.agentName)")
-            focus(session)
+            handOff(prompt, to: session)
             return
         }
         switch session.agent {
@@ -311,8 +310,7 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
                     }
                 }
             } else {
-                copyToClipboard(prompt, note: "Copied: paste it into \(session.agentName)")
-                focus(session)
+                handOff(prompt, to: session)
             }
         }
     }
@@ -322,6 +320,15 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
     /// Project tab, and prompts by clipboard.
     private func hasBridge(_ session: AgentSession) -> Bool {
         session.usesBridge && feeds.feeds[session.id] != nil
+    }
+
+    /// For agents that can't take a prompt from outside: copy it, bring the agent forward, and
+    /// keep the strip open saying so (closing it would hide the only sign anything happened).
+    private func handOff(_ prompt: String, to session: AgentSession) {
+        copyToClipboard(prompt, note: "Copied: press ⌘V in \(session.agentName), then Return")
+        NSSound(named: "Pop")?.play()
+        focus(session, closingStrip: false)
+        projectView.note("Copied: press ⌘V in \(session.agentName), then Return", for: 12)
     }
 
     private func copyToClipboard(_ prompt: String, note: String) {
@@ -428,7 +435,7 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         _ = scale
     }
 
-    private func focus(_ session: AgentSession) {
+    private func focus(_ session: AgentSession, closingStrip: Bool = true) {
         // A background app's `activate()` is ignored since macOS 14; opening the app through
         // Launch Services brings it forward the way the Dock does.
         if let bundleID = session.app,
@@ -439,7 +446,7 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
             // its thread id is the session id, and codex:// opens that thread.
             NSWorkspace.shared.open(thread)
         }
-        closeStrip()
+        if closingStrip { closeStrip() }
     }
 
     // MARK: - NSTouchBarDelegate
