@@ -11,7 +11,7 @@ import Foundation
 /// updating the app.
 enum AgentInstaller {
     enum Agent: String, CaseIterable, Identifiable {
-        case claude, cursor, codex, gemini, antigravity, opencode
+        case claude, cursor, codex, antigravity, opencode
 
         var id: String { rawValue }
 
@@ -20,7 +20,6 @@ enum AgentInstaller {
             case .claude: "Claude Code"
             case .cursor: "Cursor"
             case .codex: "Codex"
-            case .gemini: "Gemini CLI"
             case .antigravity: "Antigravity"
             case .opencode: "OpenCode"
             }
@@ -32,8 +31,7 @@ enum AgentInstaller {
             case .claude: "CLI, desktop app and IDE extensions"
             case .cursor: "Cursor's agent chat"
             case .codex: "Codex CLI and the ChatGPT app · review the hook once with /hooks"
-            case .gemini: "Gemini CLI"
-            case .antigravity: "The agy CLI (the IDE doesn't run hooks yet)"
+            case .antigravity: "Antigravity CLI (agy), Gemini CLI's successor. The IDE doesn't run hooks yet"
             case .opencode: "OpenCode in the terminal"
             }
         }
@@ -45,7 +43,7 @@ enum AgentInstaller {
             case .claude: "Run in the chat through the holdout-bridge plugin; without it, copied and the app comes forward."
             case .cursor: "Typed into the Cursor chat (needs Accessibility), or sent when its turn ends."
             case .codex: "Sent when the turn ends. When idle, copied and the chat opens."
-            case .gemini, .antigravity: "Sent when the turn ends. When idle, copied."
+            case .antigravity: "Sent when the turn ends. When idle, copied."
             case .opencode: "Submitted into the terminal UI through its plugin."
             }
         }
@@ -57,7 +55,7 @@ enum AgentInstaller {
             case .cursor: ["Cursor"]
             case .codex: ["Codex"]
             case .antigravity: ["Antigravity"]
-            case .gemini, .opencode: []
+            case .opencode: []
             }
             for name in names {
                 for directory in ["/Applications", NSHomeDirectory() + "/Applications"] {
@@ -73,7 +71,6 @@ enum AgentInstaller {
             switch self {
             case .claude, .cursor: nil
             case .codex: "AgentCodex"
-            case .gemini: "AgentGemini"
             case .antigravity: "AgentAntigravity"
             case .opencode: "AgentOpenCode"
             }
@@ -86,7 +83,6 @@ enum AgentInstaller {
             case .claude: home.appending(path: ".claude/settings.json")
             case .cursor: home.appending(path: ".cursor/hooks.json")
             case .codex: home.appending(path: ".codex/hooks.json")
-            case .gemini: home.appending(path: ".gemini/settings.json")
             case .antigravity: home.appending(path: ".gemini/config/hooks.json")
             case .opencode: home.appending(path: ".config/opencode/plugins/holdout.js")
             }
@@ -100,7 +96,6 @@ enum AgentInstaller {
             case .claude: [".claude"]
             case .cursor: [".cursor"]
             case .codex: [".codex"]
-            case .gemini: [".gemini/settings.json"]
             case .antigravity: [".gemini/antigravity"]
             case .opencode: [".config/opencode"]
             }
@@ -191,9 +186,6 @@ enum AgentInstaller {
     }
 
     static var runtime: URL { support.appending(path: "runtime") }
-
-    /// Where the holdout-bridge Claude Code mod lives after `install`.
-    static var bridge: URL { runtime.appending(path: "holdout-bridge") }
 
     private static var bundled: URL? { Bundle.main.resourceURL?.appending(path: "Runtime") }
 

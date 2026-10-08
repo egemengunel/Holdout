@@ -360,9 +360,9 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         mac.newestDistress.flatMap { $0 > macAlertsSeenUntil ? $0 : nil }
     }
 
-    /// When the newest unseen failed build (Xcode's own, or one Claude ran through ios-dock) finished.
-    /// When the newest failed build finished: Xcode's own, or one Claude ran through ios-dock.
-    /// Timed by the feed's buildAt: its updatedAt moves with any field (branch, lint, commits
+    /// When the newest unseen failed build (Xcode's own, or one a Claude Code plugin reported) finished.
+    /// When the newest failed build finished: Xcode's own, or one a Claude Code plugin reported.
+    /// Timed by the feed's buildAt: its updatedAt moves with any field (branch, commits
     /// ahead), which made one old failure flash red again and again.
     private var newestFailure: TimeInterval? {
         let xcode = builds.latest.flatMap { $0.succeeded ? nil : $0.finishedAt.timeIntervalSince1970 }

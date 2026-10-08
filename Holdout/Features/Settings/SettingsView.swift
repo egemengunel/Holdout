@@ -96,26 +96,6 @@ private struct AgentSettings: View {
                 Section { Text(problem).foregroundStyle(.red) }
             }
 
-            Section {
-                LabeledContent {
-                    Button("Copy folder path") {
-                        Task {
-                            await AgentInstaller.syncRuntime()
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(AgentInstaller.bridge.path, forType: .string)
-                        }
-                    }
-                } label: {
-                    VStack(alignment: .leading) {
-                        Text("holdout-bridge plugin")
-                        Text("Add its folder to CLAUDE_CODE_PLUGIN_DIRS.").font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-            } header: {
-                Text("Project tab")
-            } footer: {
-                Text("Optional. Holdout reads Xcode builds and git on its own. If you use Claude Code plugins that report build or lint state, this one forwards it to the Project tab.")
-            }
         }
         .formStyle(.grouped)
         .onAppear(perform: reload)
@@ -191,7 +171,7 @@ private struct AgentOptions: View {
                 Text("Copy to clipboard").tag(HoldoutSettings.Delivery.clipboard.rawValue)
             }
             Text(delivery == HoldoutSettings.Delivery.clipboard.rawValue
-                 ? "Build, Lint and Commit always copy their prompt and bring \(agent.name) forward."
+                 ? "Build and Commit always copy their prompt and bring \(agent.name) forward."
                  : agent.projectButtons)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -206,16 +186,11 @@ private struct ProjectSettings: View {
         Form {
             Section {
                 PromptField(action: .build)
-                PromptField(action: .lint)
                 PromptField(action: .commit)
             } header: {
                 Text("Button prompts")
             } footer: {
-                Text("Sent to the current agent when you press a Project button. {project}, {root} and {repo} stand for the current project. Leave a field empty for the default. Claude Code with the holdout-bridge plugin uses the plugin's own prompts.")
-            }
-            Section {
-                Text("Lint appears only if you have the swift-design-lint rules. Build and Commit work with any agent.")
-                    .foregroundStyle(.secondary)
+                Text("Sent to the current agent when you press a Project button. {project}, {root} and {repo} stand for the current project. Leave a field empty for the default.")
             }
         }
         .formStyle(.grouped)

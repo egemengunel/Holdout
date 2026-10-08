@@ -5,7 +5,7 @@
 
 import Foundation
 
-/// What the holdout-bridge mod mirrors from ios-dock and swift-design-lint for one Claude Code
+/// What a Claude Code plugin (see `Mods/holdout-bridge`) or Holdout itself reports for one
 /// session, or what `AgentProjectStore` works out for any other agent's session.
 struct ProjectFeed: Decodable {
     struct Repo: Decodable {
@@ -35,22 +35,16 @@ struct ProjectFeed: Decodable {
         let note: String?
     }
 
-    struct Lint: Decodable {
-        let issues: Int
-        let checkedEdits: Int
-    }
-
     let session: String
     let cwd: String?
     let updatedAt: TimeInterval
-    /// When `build` last changed; ios-dock's build result carries no time of its own.
+    /// When `build` last changed; a Claude Code plugin's build result carries no time of its own.
     let buildAt: TimeInterval?
     let repo: Repo?
     let project: Project?
     let build: Build?
     let ship: Ship?
-    let lint: Lint?
 
-    /// A session whose mods haven't detected anything yet has nothing to show.
-    var hasContent: Bool { repo != nil || project != nil || build != nil || lint != nil || (ship.map { $0.phase != "idle" } ?? false) }
+    /// A session nothing has detected anything yet has nothing to show.
+    var hasContent: Bool { repo != nil || project != nil || build != nil || (ship.map { $0.phase != "idle" } ?? false) }
 }

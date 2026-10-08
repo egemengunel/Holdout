@@ -5,9 +5,8 @@
 
 import Foundation
 
-/// The Project tab's feed for sessions the holdout-bridge mod doesn't cover (every agent
-/// but Claude Code): repo, branch and Xcode project from the session's folder, and lint
-/// issues in the files it edited. Builds need nothing here: Xcode logs every build.
+/// The Project tab's feed for sessions no Claude Code plugin feeds: repo, branch and Xcode
+/// project from the session's folder. Builds need nothing here: Xcode logs every build.
 final class AgentProjectStore {
     /// How often a tracked session's folder is looked at again, for branch switches.
     private static let refreshInterval: TimeInterval = 10
@@ -21,15 +20,14 @@ final class AgentProjectStore {
     func track(_ sessions: [AgentSession]) {
         for session in sessions {
             guard let cwd = session.cwd, !inFlight.contains(session.id) else { continue }
-            let key = "\(cwd)|\(session.edited ?? [])"
+            let key = cwd
             if let last = checked[session.id], last.key == key, -last.at.timeIntervalSinceNow < Self.refreshInterval { continue }
 
             checked[session.id] = (key, .now)
             inFlight.insert(session.id)
             let id = session.id
-            let edited = session.edited ?? []
             Task {
-                let feed = await Self.feed(session: id, cwd: cwd, edited: edited)
+                let feed = await Self.feed(session: id, cwd: cwd)
                 inFlight.remove(id)
                 feeds[id] = feed
                 onChange?()
@@ -40,10 +38,8 @@ final class AgentProjectStore {
         checked = checked.filter { tracked.contains($0.key) }
     }
 
-    private nonisolated static func feed(session: String, cwd: String, edited: [String]) async -> ProjectFeed? {
+    private nonisolated static func feed(session: String, cwd: String) async -> ProjectFeed? {
         guard let probe = await ProjectProbe.probe(cwd) else { return nil }
-        let swiftEdits = edited.filter { $0.hasSuffix(".swift") }
-        let issues = swiftEdits.isEmpty ? 0 : await DesignLint.issues(in: swiftEdits, cwd: cwd, root: probe.root)
         return ProjectFeed(
             session: session,
             cwd: cwd,
@@ -52,8 +48,7 @@ final class AgentProjectStore {
             repo: ProjectFeed.Repo(name: probe.repoName, root: probe.root, branch: probe.branch),
             project: probe.projectName.map { ProjectFeed.Project(name: $0, root: probe.root, branch: probe.branch) },
             build: nil,
-            ship: nil,
-            lint: probe.projectName == nil ? nil : ProjectFeed.Lint(issues: issues, checkedEdits: swiftEdits.count)
+            ship: nil
         )
     }
 }

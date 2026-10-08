@@ -6,7 +6,7 @@
 import Foundation
 
 /// What Holdout can tell about an agent's folder by itself: the git repo and branch, and
-/// the Xcode project in it, found the way ios-dock does (an .xcodeproj within two levels).
+/// the Xcode project in it, an .xcodeproj within two levels.
 struct ProjectProbe {
     let repoName: String
     let root: String

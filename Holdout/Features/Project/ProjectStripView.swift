@@ -6,18 +6,16 @@
 import AppKit
 
 /// The Project tab: which project and branch you're in, news only when there is some
-/// (a build result, lint issues, a TestFlight ship), and ios-dock's actions.
+/// (a build result, a TestFlight ship), and the Build and Commit actions.
 final class ProjectStripView: NSView {
-    /// ios-dock's buttons, sent through the holdout-bridge mod as the same prompts.
     enum Action: String {
-        case build, lint, commit
+        case build, commit
 
         /// The built-in wording as one template, shown in Settings; {project}, {root} and {repo}
         /// stand for the current project.
         var defaultTemplate: String {
             switch self {
             case .build: "Build the Xcode project in {root} (through the Xcode MCP if you have it, otherwise xcodebuild), then list its warnings. If it fails, fix the errors and build again until it is clean. Report the warnings at the end."
-            case .lint: "In {root}, list the Swift files changed on this branch against the default branch, plus uncommitted ones. Check each against the project's CLAUDE.md design-system and architecture rules. Fix the violations, touching only the offending lines, then build once to confirm it compiles."
             case .commit: "In {root}, review the uncommitted changes for bugs and leftovers, then propose an atomic commit grouping with messages. Do not commit yet: wait for my approval in my next message."
             }
         }
@@ -25,7 +23,6 @@ final class ProjectStripView: NSView {
         var title: String {
             switch self {
             case .build: "Build"
-            case .lint: "Lint"
             case .commit: "Commit"
             }
         }
@@ -33,13 +30,11 @@ final class ProjectStripView: NSView {
         var symbol: String {
             switch self {
             case .build: "hammer"
-            case .lint: "wand.and.stars"
             case .commit: "checkmark.circle"
             }
         }
 
-        /// The prompt for agents the holdout-bridge mod doesn't cover, kept in step with
-        /// ios-dock's ACTIONS (the bridge sends those itself).
+        /// The prompt a button sends.
         func prompt(project: ProjectFeed.Project?, repo: ProjectFeed.Repo?) -> String? {
             if let custom = HoldoutSettings.promptOverride(for: rawValue) {
                 let name = project?.name ?? repo?.name
@@ -54,12 +49,6 @@ final class ProjectStripView: NSView {
                 "holdout: the user pressed Build on the Touch Bar for \(p.name).",
                 "Build the Xcode project in \(p.root ?? p.name) (through the Xcode MCP if you have it, otherwise xcodebuild), then list its warnings.",
                 "If it fails, fix the errors and build again until it is clean. Report the warnings at the end.",
-            ] }
-            case .lint: project.map { p in [
-                "holdout: the user pressed Design lint & fix on the Touch Bar for \(p.name).",
-                "In \(p.root ?? p.name), list the Swift files changed on this branch against the default branch, plus uncommitted ones.",
-                "Check each against the project's CLAUDE.md design-system and architecture rules (typography, icons, colors, buttons, MV vs MVVM and so on).",
-                "Fix the violations, touching only the offending lines, then build once to confirm it compiles. Summarize what you changed and anything you left on purpose.",
             ] }
             case .commit: repo.map { r in [
                 "holdout: the user pressed Review & commit on the Touch Bar for \(r.name).",
@@ -83,7 +72,7 @@ final class ProjectStripView: NSView {
     private var noteResetTask: Task<Void, Never>?
     private var build: XcodeBuild?
     private var actions: [Action] = []
-    /// [ Build | Lint | Commit ] as one control, like the tabs and the Sim stepper.
+    /// [ Build | Commit ] as one control, like the tabs and the Sim stepper.
     private lazy var actionControl = NSSegmentedControl(labels: [], trackingMode: .momentary, target: self, action: #selector(runAction))
 
     override init(frame: NSRect) {
@@ -145,7 +134,7 @@ final class ProjectStripView: NSView {
         stack.setViews(views, in: .leading)
     }
 
-    /// Only what's worth a glance: the newer of Xcode's and Claude's build, lint issues, a ship in flight.
+    /// Only what's worth a glance: the newer of Xcode's and Claude's build, a ship in flight.
     private func news(xcodeBuild: XcodeBuild?, feed: ProjectFeed, now: Date) -> [NSView] {
         var views: [NSView] = []
         let claudeBuildIsNewer = feed.build != nil
@@ -159,10 +148,6 @@ final class ProjectStripView: NSView {
             views.append(pill)
         } else if let xcodeBuild {
             views.append(buildPill(xcodeBuild, named: false, now: now))
-        }
-
-        if let lint = feed.lint, lint.checkedEdits > 0, lint.issues > 0 {
-            views.append(pill(symbol: "pencil.line", tint: .systemOrange, title: "\(lint.issues)", detail: lint.issues == 1 ? "lint issue" : "lint issues"))
         }
 
         if let ship = feed.ship, ship.phase != "idle" {
@@ -194,9 +179,7 @@ final class ProjectStripView: NSView {
     }
 
     private func actionsControl(_ feed: ProjectFeed) -> NSSegmentedControl? {
-        // Lint follows the swift-design-lint mod's rules, so it shows only for people who have it.
-        let lints = FileManager.default.fileExists(atPath: DesignLint.rulesFile.path)
-        actions = (feed.project != nil ? (lints ? [.build, .lint] : [.build]) : []) + (feed.repo != nil ? [.commit] : [])
+        actions = (feed.project != nil ? [.build] : []) + (feed.repo != nil ? [.commit] : [])
         guard !actions.isEmpty else { return nil }
         actionControl.segmentCount = actions.count
         for (segment, action) in actions.enumerated() {

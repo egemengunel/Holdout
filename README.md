@@ -4,9 +4,9 @@ Your coding agents, iOS Simulator, Xcode builds and Mac health, on the Touch Bar
 
 Holdout adds a ✋ to the Control Strip. Tap it and a strip opens beside the Control Strip with four tabs:
 
-- **Agents**: live sessions from Claude Code, Cursor, Codex, Gemini CLI, Antigravity and OpenCode. Working, waiting on you, done.
+- **Agents**: live sessions from Claude Code, Cursor, Codex (CLI and the ChatGPT app), Antigravity CLI and OpenCode. Working, waiting on you, done.
 - **Sim**: dark mode, Dynamic Type, screenshots, status bar, push, location, boot.
-- **Project**: Xcode build results and Build / Lint / Commit buttons that prompt the current agent.
+- **Project**: Xcode build results, git state, and Build / Commit buttons that prompt the current agent.
 - **Mac**: memory pressure, swap and CPU, with alerts only when you'd feel it.
 
 The Control Strip icon flashes green when a session finishes, a hammer for builds, amber when an agent needs you, and red when memory is critical.

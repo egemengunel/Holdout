@@ -53,7 +53,7 @@
 				08A3A77B3072B8F000606D4E /* Sources */,
 				08A3A77C3072B8F000606D4E /* Frameworks */,
 				08A3A77D3072B8F000606D4E /* Resources */,
-				08A3A7A03072B8F000606D4E /* Bundle Hooks and Bridge */,
+				08A3A7A03072B8F000606D4E /* Bundle Hooks */,
 			);
 			buildRules = (
 			);
@@ -108,16 +108,16 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		08A3A7A03072B8F000606D4E /* Bundle Hooks and Bridge */ = {
+		08A3A7A03072B8F000606D4E /* Bundle Hooks */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
-			name = "Bundle Hooks and Bridge";
+			name = "Bundle Hooks";
 			shellPath = /bin/sh;
 			shellScript = (
 				"runtime=\"$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Resources/Runtime\"",
 				"rm -rf \"$runtime\"",
 				"mkdir -p \"$runtime\"",
-				"rsync -a --exclude .DS_Store \"$SRCROOT/Hooks\" \"$SRCROOT/Mods/holdout-bridge\" \"$runtime/\"",
+				"rsync -a --exclude .DS_Store \"$SRCROOT/Hooks\" \"$runtime/\"",
 				"",
 			);
 		};
