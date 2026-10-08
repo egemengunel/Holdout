@@ -38,7 +38,8 @@ const PROMPTS: Record<string, (project: IosProject | null, repo: RepoInfo | null
 
 let stop: (() => void) | undefined
 let lastWritten = ''
-let lastBuild = ''
+/** null until the first sample, whose build (if any) predates this load and has no known age. */
+let lastBuild: string | null = null
 /** When ios-dock's build result last changed, so Holdout can tell it from a newer Xcode build. */
 let buildAt: number | null = null
 let lastCommand = ''
@@ -66,7 +67,9 @@ async function publish($: EngineInterface) {
   if (!where) return
   lastWritten = body
   const buildJSON = JSON.stringify(feed.build)
-  if (buildJSON !== lastBuild) {
+  if (lastBuild === null) {
+    lastBuild = buildJSON
+  } else if (buildJSON !== lastBuild) {
     lastBuild = buildJSON
     buildAt = feed.build ? Math.floor(now / 1000) : null
   }

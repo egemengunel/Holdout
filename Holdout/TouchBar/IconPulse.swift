@@ -12,12 +12,14 @@ enum IconPulse: Equatable {
     /// Green check that flashes quickly a few times after a session finishes, glows down,
     /// then cross-fades back to the hand.
     /// Also plays for a successful Xcode build, with a hammer instead of the check.
-    case done(at: TimeInterval, symbol: String = "checkmark")
+    /// A failed build plays it in red with the hammer, then clears like the rest.
+    case done(at: TimeInterval, symbol: String = "checkmark", isFailure: Bool = false)
     /// Blue, slow breathing.
     case working
     /// Amber, quicker pulse.
     case waiting
     /// Red, quick eased flashes, like the done check's but continuing until seen.
+    /// Red until you open the Mac tab: the only persistent red, for Mac distress.
     case alert
     /// Orange, two soft flashes that settle back to the hand: worth a glance, not urgent.
     case headsUp(at: TimeInterval, symbol: String)
@@ -35,7 +37,7 @@ enum IconPulse: Equatable {
     /// For states that play once and settle: when they began and how long they last.
     var transient: (startedAt: TimeInterval, duration: TimeInterval)? {
         switch self {
-        case let .done(at, _): (at, Self.doneDuration)
+        case let .done(at, _, _): (at, Self.doneDuration)
         case let .headsUp(at, _): (at, Self.headsUpDuration)
         default: nil
         }
@@ -44,7 +46,7 @@ enum IconPulse: Equatable {
     var symbol: String {
         switch self {
         case .idle: Self.idleSymbol
-        case let .done(_, symbol): symbol
+        case let .done(_, symbol, _): symbol
         case .working: "apple.terminal.on.rectangle.fill"
         case .waiting: "hand.tap.fill"
         case .alert: "exclamationmark.triangle.fill"
@@ -56,7 +58,7 @@ enum IconPulse: Equatable {
     var color: NSColor? {
         switch self {
         case .idle: nil
-        case .done: .systemGreen
+        case let .done(_, _, isFailure): isFailure ? .systemRed : .systemGreen
         case .working: .systemBlue
         case .waiting: .systemOrange
         case .alert: .systemRed

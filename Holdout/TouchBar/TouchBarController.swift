@@ -65,6 +65,9 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
     /// Failures up to this moment have been seen (in the Project tab), so they stop blinking red.
     /// Starts at launch, so an old failure doesn't alarm when Holdout starts.
     private var failuresSeenUntil = Date.now.timeIntervalSince1970
+    /// The newest failure already flashed; starts at launch so old failures don't flash.
+    private var lastFailureFlashed = Date.now.timeIntervalSince1970
+    private var buildFailedAt: TimeInterval?
     /// The newest Xcode build already accounted for; starts at launch so old builds don't flash.
     private var lastBuildSeen = Date.now
     /// When Holdout noticed a fresh successful build, to flash the hammer from that moment.
@@ -208,18 +211,25 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
             .flatMap { now - $0 < IconPulse.doneDuration ? IconPulse.done(at: $0, symbol: "hammer.fill") : nil }
         // Whichever finished last gets the flash.
         let celebration = [sessionDone, buildDone].compactMap { $0 }.max { ($0.transient?.startedAt ?? 0) < ($1.transient?.startedAt ?? 0) }
-        let failed = latestFailure != nil || unseenMacAlert != nil
+        let failed = unseenMacAlert != nil
+        // A failed build flashes once, from when Holdout notices it, then clears like the rest.
+        if let failure = newestFailure, failure > lastFailureFlashed {
+            lastFailureFlashed = failure
+            buildFailedAt = now
+        }
+        let buildFailed = buildFailedAt
+            .flatMap { now - $0 < IconPulse.doneDuration ? IconPulse.done(at: $0, symbol: "hammer.fill", isFailure: true) : nil }
         let headsUp = mac.headsUp.flatMap { Date.now.timeIntervalSince1970 - $0.at < IconPulse.headsUpDuration ? $0 : nil }
         // Heads-ups and done flashes are brief, so they play over working (a session finishing
         // while another works still gets its check); a session waiting on you still wins.
         let flash = headsUp.map { IconPulse.headsUp(at: $0.at, symbol: $0.symbol) } ?? celebration
         statusIcon.show(
             failed ? .alert
-                : waiting ? .waiting
-                : flash ?? (working > 0 ? .working : .idle),
+                : buildFailed ?? (waiting ? .waiting
+                : flash ?? (working > 0 ? .working : .idle)),
             reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         )
-        statusIcon.setCount(!failed && !waiting && flash == nil && working > 0 ? working : nil)
+        statusIcon.setCount(!failed && buildFailed == nil && !waiting && flash == nil && working > 0 ? working : nil)
 
         if isPresented && tab == .agents {
             agentsView.update(visible)
@@ -338,10 +348,18 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
     }
 
     /// When the newest unseen failed build (Xcode's own, or one Claude ran through ios-dock) finished.
-    private var latestFailure: TimeInterval? {
+    /// When the newest failed build finished: Xcode's own, or one Claude ran through ios-dock.
+    /// Timed by the feed's buildAt: its updatedAt moves with any field (branch, lint, commits
+    /// ahead), which made one old failure flash red again and again.
+    private var newestFailure: TimeInterval? {
         let xcode = builds.latest.flatMap { $0.succeeded ? nil : $0.finishedAt.timeIntervalSince1970 }
-        let claude = currentFeed.flatMap { $0.build?.isOk == false ? $0.updatedAt : nil }
-        return [xcode, claude].compactMap { $0 }.filter { $0 > failuresSeenUntil }.max()
+        let claude = currentFeed.flatMap { $0.build?.isOk == false ? $0.buildAt : nil }
+        return [xcode, claude].compactMap { $0 }.max()
+    }
+
+    /// A failure you haven't looked at in the Project tab; opening the strip goes there.
+    private var latestFailure: TimeInterval? {
+        newestFailure.flatMap { $0 > failuresSeenUntil ? $0 : nil }
     }
 
     /// Debug aid: the content view tree with frames.
