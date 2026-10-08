@@ -16,7 +16,7 @@ agent=${1:-}
 event_arg=${2:-}
 reply=
 case "$agent" in
-  gemini|antigravity) reply='{}' ;;
+  gemini|antigravity|codex) reply='{}' ;;
 esac
 trap 'printf "%s" "$reply"' EXIT
 

@@ -31,7 +31,7 @@ enum AgentInstaller {
             switch self {
             case .claude: "CLI, desktop app and IDE extensions"
             case .cursor: "Cursor's agent chat"
-            case .codex: "Codex CLI · trust the hook once with /hooks"
+            case .codex: "Codex CLI and the ChatGPT app · review the hook once with /hooks"
             case .gemini: "Gemini CLI"
             case .antigravity: "The agy CLI (the IDE doesn't run hooks yet)"
             case .opencode: "OpenCode in the terminal"
