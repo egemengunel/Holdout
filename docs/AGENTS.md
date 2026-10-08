@@ -22,3 +22,7 @@ Ideas for apps that can't take prompts
 - Per-agent options in Settings: hide the agent, force clipboard delivery, edit the button prompts.
 
 OpenCode notes: the 2.0 CLI and the 1.x desktop app use different plugin shapes; Holdout's plugin serves both from one default export. Verified on the 2.0 CLI with a free model (`opencode run -m opencode/big-pickle`), which needs no sign-in.
+
+Verified October 2026: Antigravity CLI (`agy -p`) reports a session through the registered hooks (PreInvocation, PostToolUse, Stop). The Antigravity desktop app is installed but its hook behavior isn't verified.
+
+OpenCode data warning: OpenCode 2.0 (Homebrew CLI) and the 1.18 desktop app can't share `~/.local/share/opencode/opencode.db`. After the 2.0 CLI writes it, the 1.x app fails with "Database is not empty and has no session table". Use one line of releases per machine.
