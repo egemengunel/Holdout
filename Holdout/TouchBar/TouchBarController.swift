@@ -60,6 +60,9 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
     private var isPresented = false
     private var slotTimer: Timer?
     private var activationObserver: NSObjectProtocol?
+    /// The app hosting agent sessions that you last had in front (Cursor, Claude, a terminal...).
+    /// Project buttons go to its newest session, not to whichever session wrote last.
+    private var focusedHost: String?
     private var ticker: Timer?
     private var visibilityObservation: NSKeyValueObservation?
     /// Failures up to this moment have been seen (in the Project tab), so they stop blinking red.
@@ -130,9 +133,13 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         // re-asserting while already holding it is a no-op.
         activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.reclaimControlStrip() }
+        ) { [weak self] note in
+            MainActor.assumeIsolated {
+                self?.reclaimControlStrip()
+                self?.noteFocus((note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.bundleIdentifier)
+            }
         }
+        noteFocus(NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
         slotTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.reclaimControlStrip() }
         }
@@ -251,12 +258,25 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         }
     }
 
-    /// The feed of the session you touched most recently: the mods' for Claude Code, Holdout's
-    /// own for other agents. Sessions that have ended (their hook file is gone) don't count,
-    /// even if their feed file is still on disk.
+    /// Remembers an app you switched to if it hosts agent sessions; other apps (Xcode, a browser)
+    /// leave the last agent app as the target.
+    private func noteFocus(_ bundleID: String?) {
+        guard let bundleID, bundleID != Bundle.main.bundleIdentifier,
+              sessions.sessions.contains(where: { $0.app == bundleID }) else { return }
+        focusedHost = bundleID
+    }
+
+    /// The target of the Project tab and its buttons: the newest session in the agent app you
+    /// last had in front, else the newest session overall. The feed is the plugin's for Claude
+    /// Code, Holdout's own for other agents. Sessions that have ended (their hook file is gone)
+    /// don't count, even if their feed file is still on disk.
     private var currentFeed: ProjectFeed? {
         sessions.sessions
-            .sorted { $0.updatedAt > $1.updatedAt }
+            .sorted { lhs, rhs in
+                let lhsFocused = lhs.app != nil && lhs.app == focusedHost
+                let rhsFocused = rhs.app != nil && rhs.app == focusedHost
+                return lhsFocused != rhsFocused ? lhsFocused : lhs.updatedAt > rhs.updatedAt
+            }
             .lazy
             .compactMap { self.hasBridge($0) ? self.feeds.feeds[$0.id] : self.agentProjects.feeds[$0.id] }
             .first { $0.hasContent }
