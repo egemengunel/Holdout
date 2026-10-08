@@ -48,7 +48,9 @@ final class AgentProjectStore {
             repo: ProjectFeed.Repo(name: probe.repoName, root: probe.root, branch: probe.branch),
             project: probe.projectName.map { ProjectFeed.Project(name: $0, root: probe.root, branch: probe.branch) },
             build: nil,
-            ship: nil
+            ship: nil,
+            actions: nil,
+            badges: nil
         )
     }
 }

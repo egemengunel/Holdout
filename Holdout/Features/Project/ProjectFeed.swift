@@ -35,6 +35,22 @@ struct ProjectFeed: Decodable {
         let note: String?
     }
 
+    /// A button the feed's source offers, e.g. a Claude Code plugin's extra actions.
+    struct Control: Decodable {
+        let id: String
+        let title: String
+        let symbol: String
+    }
+
+    /// A small status chip the feed's source wants shown.
+    struct Badge: Decodable {
+        let symbol: String
+        let title: String
+        let detail: String?
+        /// "red", "orange", "green", "blue" or nil for neutral.
+        let tint: String?
+    }
+
     let session: String
     let cwd: String?
     let updatedAt: TimeInterval
@@ -44,6 +60,9 @@ struct ProjectFeed: Decodable {
     let project: Project?
     let build: Build?
     let ship: Ship?
+    /// When present, replaces the built-in Build / Commit buttons; the feed's source runs them.
+    let actions: [Control]?
+    let badges: [Badge]?
 
     /// A session nothing has detected anything yet has nothing to show.
     var hasContent: Bool { repo != nil || project != nil || build != nil || (ship.map { $0.phase != "idle" } ?? false) }

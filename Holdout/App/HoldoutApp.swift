@@ -95,9 +95,13 @@ private struct MenuBarLabel: View {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let touchBar = TouchBarController()
+    /// Holdout is a windowless background app, which macOS's App Nap throttles hard: its timers
+    /// slip to many seconds, so the strip and icon stalled until a restart. This opts out.
+    private var activity: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         HoldoutSettings.registerDefaults()
+        activity = ProcessInfo.processInfo.beginActivity(options: [.userInitiatedAllowingIdleSystemSleep], reason: "Keeping the Touch Bar status current")
         Task { await AgentInstaller.refreshIfInstalled() }
         if touchBar.install() {
             print("Holdout: Control Strip item installed")

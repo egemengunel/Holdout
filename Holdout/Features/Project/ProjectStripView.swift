@@ -8,35 +8,29 @@ import AppKit
 /// The Project tab: which project and branch you're in, news only when there is some
 /// (a build result, a TestFlight ship), and the Build and Commit actions.
 final class ProjectStripView: NSView {
-    enum Action: String {
-        case build, commit
+    /// A Project button. Build and Commit are built in; a feed can offer others by id, which
+    /// only its own source (a Claude Code plugin) knows how to run.
+    struct Action: Hashable {
+        let id: String
+        let title: String
+        let symbol: String
+
+        static let build = Action(id: "build", title: "Build", symbol: "hammer")
+        static let commit = Action(id: "commit", title: "Commit", symbol: "checkmark.circle")
 
         /// The built-in wording as one template, shown in Settings; {project}, {root} and {repo}
         /// stand for the current project.
         var defaultTemplate: String {
-            switch self {
-            case .build: "Build the Xcode project in {root} (through the Xcode MCP if you have it, otherwise xcodebuild), then list its warnings. If it fails, fix the errors and build again until it is clean. Report the warnings at the end."
-            case .commit: "In {root}, review the uncommitted changes for bugs and leftovers, then propose an atomic commit grouping with messages. Do not commit yet: wait for my approval in my next message."
+            switch id {
+            case "build": "Build the Xcode project in {root} (through the Xcode MCP if you have it, otherwise xcodebuild), then list its warnings. If it fails, fix the errors and build again until it is clean. Report the warnings at the end."
+            default: "In {root}, review the uncommitted changes for bugs and leftovers, then propose an atomic commit grouping with messages. Do not commit yet: wait for my approval in my next message."
             }
         }
 
-        var title: String {
-            switch self {
-            case .build: "Build"
-            case .commit: "Commit"
-            }
-        }
-
-        var symbol: String {
-            switch self {
-            case .build: "hammer"
-            case .commit: "checkmark.circle"
-            }
-        }
-
-        /// The prompt a button sends.
+        /// The prompt a built-in button sends; nil for feed-defined buttons.
         func prompt(project: ProjectFeed.Project?, repo: ProjectFeed.Repo?) -> String? {
-            if let custom = HoldoutSettings.promptOverride(for: rawValue) {
+            guard id == "build" || id == "commit" else { return nil }
+            if let custom = HoldoutSettings.promptOverride(for: id) {
                 let name = project?.name ?? repo?.name
                 guard let name else { return nil }
                 return custom
@@ -44,18 +38,17 @@ final class ProjectStripView: NSView {
                     .replacingOccurrences(of: "{root}", with: project?.root ?? repo?.root ?? name)
                     .replacingOccurrences(of: "{repo}", with: repo?.name ?? name)
             }
-            let lines: [String]? = switch self {
-            case .build: project.map { p in [
-                "holdout: the user pressed Build on the Touch Bar for \(p.name).",
-                "Build the Xcode project in \(p.root ?? p.name) (through the Xcode MCP if you have it, otherwise xcodebuild), then list its warnings.",
-                "If it fails, fix the errors and build again until it is clean. Report the warnings at the end.",
-            ] }
-            case .commit: repo.map { r in [
-                "holdout: the user pressed Review & commit on the Touch Bar for \(r.name).",
-                "In \(r.root ?? r.name), review the uncommitted changes for bugs and leftovers, then propose an atomic commit grouping with messages.",
-                "Do not commit yet: wait for the user to approve the grouping in their next message.",
-            ] }
-            }
+            let lines: [String]? = id == "build"
+                ? project.map { p in [
+                    "holdout: the user pressed Build on the Touch Bar for \(p.name).",
+                    "Build the Xcode project in \(p.root ?? p.name) (through the Xcode MCP if you have it, otherwise xcodebuild), then list its warnings.",
+                    "If it fails, fix the errors and build again until it is clean. Report the warnings at the end.",
+                ] }
+                : repo.map { r in [
+                    "holdout: the user pressed Review & commit on the Touch Bar for \(r.name).",
+                    "In \(r.root ?? r.name), review the uncommitted changes for bugs and leftovers, then propose an atomic commit grouping with messages.",
+                    "Do not commit yet: wait for the user to approve the grouping in their next message.",
+                ] }
             return lines?.joined(separator: "\n\n")
         }
     }
@@ -155,6 +148,17 @@ final class ProjectStripView: NSView {
             views.append(pill(symbol: "arrow.up.circle", tint: failed ? .systemRed : .systemBlue, title: "TestFlight", detail: ship.note.map { Self.shorten($0) } ?? ship.phase))
         }
 
+        for badge in feed.badges ?? [] {
+            let tint: NSColor = switch badge.tint {
+            case "red": .systemRed
+            case "orange": .systemOrange
+            case "green": .systemGreen
+            case "blue": .systemBlue
+            default: .secondaryLabelColor
+            }
+            views.append(pill(symbol: badge.symbol, tint: tint, title: badge.title, detail: badge.detail ?? ""))
+        }
+
         // Problems first, right after the project chip.
         return views.sorted { ($0 as? NSButton)?.bezelColor == Self.failedBezel && ($1 as? NSButton)?.bezelColor != Self.failedBezel }
     }
@@ -179,7 +183,11 @@ final class ProjectStripView: NSView {
     }
 
     private func actionsControl(_ feed: ProjectFeed) -> NSSegmentedControl? {
-        actions = (feed.project != nil ? [.build] : []) + (feed.repo != nil ? [.commit] : [])
+        if let offered = feed.actions, !offered.isEmpty {
+            actions = offered.map { Action(id: $0.id, title: $0.title, symbol: $0.symbol) }
+        } else {
+            actions = (feed.project != nil ? [.build] : []) + (feed.repo != nil ? [.commit] : [])
+        }
         guard !actions.isEmpty else { return nil }
         actionControl.segmentCount = actions.count
         for (segment, action) in actions.enumerated() {

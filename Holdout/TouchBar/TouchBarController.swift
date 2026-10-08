@@ -141,6 +141,8 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         ticker = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.refresh() }
         }
+        // Tick during Touch Bar and menu tracking too, which default-mode timers sit out.
+        if let ticker { RunLoop.main.add(ticker, forMode: .common) }
         return true
     }
 
@@ -265,22 +267,22 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
     /// and the others (Cursor included) at the end of the turn they're on, in that same
     /// chat, or on the clipboard when they're idle.
     private func send(_ action: ProjectStripView.Action) {
-        Self.log.info("pressed \(action.rawValue, privacy: .public)")
+        Self.log.info("pressed \(action.id, privacy: .public)")
         guard let feed = currentFeed,
               let session = sessions.sessions.first(where: { $0.id == feed.session })
         else {
-            Self.log.error("\(action.rawValue, privacy: .public): no session with a project feed")
+            Self.log.error("\(action.id, privacy: .public): no session with a project feed")
             return
         }
-        Self.log.info("\(action.rawValue, privacy: .public) for \(session.agentName, privacy: .public) \(session.id, privacy: .public), \(session.state.isWorking ? "working" : "idle", privacy: .public)")
+        Self.log.info("\(action.id, privacy: .public) for \(session.agentName, privacy: .public) \(session.id, privacy: .public), \(session.state.isWorking ? "working" : "idle", privacy: .public)")
 
         if hasBridge(session) {
-            write(["id": UUID().uuidString, "action": action.rawValue], for: session)
+            write(["id": UUID().uuidString, "action": action.id], for: session)
             focus(session)
             return
         }
         guard let prompt = action.prompt(project: feed.project, repo: feed.repo) else {
-            Self.log.error("\(action.rawValue, privacy: .public): no prompt for this project")
+            Self.log.error("\(action.id, privacy: .public): no prompt for this project")
             return
         }
 

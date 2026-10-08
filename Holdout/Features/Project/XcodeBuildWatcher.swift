@@ -22,6 +22,7 @@ final class XcodeBuildWatcher {
         timer = Timer.scheduledTimer(withTimeInterval: Self.pollInterval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.scan() }
         }
+        if let timer { RunLoop.main.add(timer, forMode: .common) }
     }
 
     /// The latest build of the project with this name, matched case-insensitively.

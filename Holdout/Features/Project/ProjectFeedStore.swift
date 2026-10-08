@@ -8,7 +8,7 @@ import Foundation
 /// Reads the bridge mod's feed files, one per Claude Code session.
 final class ProjectFeedStore {
     static let directory = URL.applicationSupportDirectory.appending(path: "Holdout/feeds", directoryHint: .isDirectory)
-    private static let pollInterval: TimeInterval = 2
+    private static let pollInterval: TimeInterval = 0.5
     /// A feed whose session has ended is removed after this; the mod can't delete files itself.
     private static let endedGrace: TimeInterval = 5 * 60
 
@@ -24,6 +24,7 @@ final class ProjectFeedStore {
         timer = Timer.scheduledTimer(withTimeInterval: Self.pollInterval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.scan() }
         }
+        if let timer { RunLoop.main.add(timer, forMode: .common) }
     }
 
     /// The mod writes files in place, which a directory watch wouldn't see, so this compares dates.

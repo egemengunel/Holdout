@@ -203,7 +203,7 @@ private struct PromptField: View {
 
     init(action: ProjectStripView.Action) {
         self.action = action
-        _text = AppStorage(wrappedValue: "", HoldoutSettings.promptKey(action.rawValue))
+        _text = AppStorage(wrappedValue: "", HoldoutSettings.promptKey(action.id))
     }
 
     var body: some View {

@@ -14,7 +14,7 @@ const BUILD = { plugin: 'ios-dock', key: 'build' } as const
 const SHIP = { plugin: 'ios-dock', key: 'ship' } as const
 const LINT = { plugin: 'swift-design-lint', key: 'tally' } as const
 
-const INTERVAL_MS = 2_000
+const INTERVAL_MS = 1_000
 
 /** Kept in step with ios-dock's ACTIONS. */
 const PROMPTS: Record<string, (project: IosProject | null, repo: RepoInfo | null) => string[] | null> = {
@@ -59,6 +59,14 @@ async function publish($: EngineInterface) {
     build: build.value ?? null,
     ship: ship.value ?? null,
     lint: lint.value ?? null,
+    // What this plugin offers; Holdout shows whatever is listed here.
+    actions: [
+      ...(project.value ? [{ id: 'build', title: 'Build', symbol: 'hammer' }, { id: 'lint', title: 'Lint', symbol: 'wand.and.stars' }] : []),
+      ...(repo.value ? [{ id: 'commit', title: 'Commit', symbol: 'checkmark.circle' }] : []),
+    ],
+    badges: lint.value && lint.value.checkedEdits > 0 && lint.value.issues > 0
+      ? [{ symbol: 'pencil.line', title: String(lint.value.issues), detail: lint.value.issues === 1 ? 'lint issue' : 'lint issues', tint: 'orange' }]
+      : [],
   }
   const body = JSON.stringify(feed)
   if (body === lastWritten) return
