@@ -97,7 +97,7 @@ install_opencode() {
   echo "OpenCode"
   plugin="$HOME/.config/opencode/plugins/holdout.js"
   mkdir -p "$(dirname "$plugin")"
-  printf 'export * from "%s"\n' "$hooks_dir/opencode/holdout.js" > "$plugin"
+  printf 'export { default } from "%s"\n' "$hooks_dir/opencode/holdout.js" > "$plugin"
   echo "  wrote $plugin"
 }
 

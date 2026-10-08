@@ -34,7 +34,7 @@ function send(payload) {
   } catch {}
 }
 
-export const Holdout = async ({ client, directory }) => {
+const core = ({ client, directory }) => {
   // Sessions mid-turn, so a turn's start and end are reported once each.
   const busy = new Set()
   // Subagent sessions run inside a parent's turn; the parent already shows it.
@@ -67,7 +67,7 @@ export const Holdout = async ({ client, directory }) => {
     if (busy.delete(sessionID)) report(sessionID, "Stop")
   }
 
-  return {
+  const hooks = {
     event: async ({ event }) => {
       const properties = event.properties ?? {}
       switch (event.type) {
@@ -105,4 +105,75 @@ export const Holdout = async ({ client, directory }) => {
       report(input.sessionID, "PostToolUse", { tool_name: input.tool, tool_input: input.args })
     },
   }
+  return { hooks, report, begin, finish, sessions, busy, children }
+}
+
+// OpenCode 1.18.29+ (`server`) and 2.0 (`setup`) take different plugin shapes, so one default
+// export carries both. 2.0 has no hook map: its events (session.execution.started, ...) come
+// through `ctx.event.subscribe` and are translated to the same reports.
+export default {
+  id: "holdout",
+  async server(input) {
+    return core(input).hooks
+  },
+  setup(ctx) {
+    const { report, begin, finish, sessions, busy, children } = core({ client: ctx.client, directory: ctx.location?.directory })
+    const controller = new AbortController()
+    const toolNames = new Map()
+
+    const translate = (event) => {
+      const data = event.data ?? {}
+      const id = data.sessionID ?? event.durable?.aggregateID
+      const directory = event.location?.directory
+      switch (event.type) {
+        case "session.created":
+          if (data.parentID) children.add(id)
+          else report(id, "SessionStart", { cwd: directory })
+          break
+        case "session.deleted":
+          busy.delete(id)
+          report(id, "SessionEnd")
+          children.delete(id)
+          sessions.delete(id)
+          break
+        case "session.execution.started":
+          begin(id)
+          break
+        case "session.execution.succeeded":
+        case "session.execution.failed":
+        case "session.execution.cancelled":
+        case "session.execution.interrupted":
+          finish(id)
+          break
+        case "session.tool.input.started":
+          toolNames.set(data.id, data.name)
+          report(id, "PreToolUse", { tool_name: data.name })
+          break
+        case "session.tool.success":
+        case "session.tool.failed":
+        case "session.tool.error":
+          report(id, "PostToolUse", { tool_name: toolNames.get(data.id) })
+          toolNames.delete(data.id)
+          break
+        default:
+          // Approval prompts: their event names aren't documented, so match by meaning.
+          if (/permission|approval/.test(event.type)) {
+            if (/(asked|requested|pending)/.test(event.type)) {
+              report(id, "Notification", { notification_type: "permission_prompt" })
+            } else if (/(replied|granted|denied|answered|resolved)/.test(event.type)) {
+              report(id, "PostToolUse")
+            }
+          }
+      }
+    }
+
+    void (async () => {
+      try {
+        for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
+          try { translate(event) } catch {}
+        }
+      } catch {}
+    })()
+    return () => controller.abort()
+  },
 }

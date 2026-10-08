@@ -9,7 +9,7 @@ Researched October 2026 from each agent's docs, plus tests on a real Mac where n
 | Cursor | Reads Claude's hooks; native `~/.cursor/hooks.json` adds shell/MCP hooks | Accessibility paste into the chat input (`CursorChat`) | follow-up at Stop | `cursor.com/link/prompt?text=` pre-fills a new chat; nothing auto-runs, `&` handling is unreliable, 8,000 chars max |
 | Codex (CLI + ChatGPT app) | `~/.codex/hooks.json`; **hooks must be trusted** (`/hooks`, or the app's prompt); CLI and app share it (verified) | none: clipboard, and `codex://threads/<id>` opens the chat | follow-up at Stop (`decision: block`) | `codex://threads/<id>`, `codex://settings/...`, `codex://review`; no prompt parameter found |
 | Antigravity CLI (`agy`; Gemini CLI was retired June 2026) | `~/.gemini/config/hooks.json`; **only the `agy` CLI runs hooks**, not the IDE (community reports) | none | Stop hook can continue (unverified wording) | none |
-| OpenCode | plugin in `~/.config/opencode/plugins` | plugin submits into the TUI (`/tui/append-prompt`, `/tui/submit-prompt`, `prompt_async` also exist on its server) | same | none |
+| OpenCode (CLI 2.0 and desktop 1.18) | plugin in `~/.config/opencode/plugins` | plugin submits into the TUI (`/tui/append-prompt`, `/tui/submit-prompt`, `prompt_async` also exist on its server) | same | none |
 
 Takeaways
 
@@ -20,3 +20,5 @@ Ideas for apps that can't take prompts
 
 - Show repo state the agent can't: branch, dirty file count, ahead/behind, last Xcode build (already there), and Build / Commit as copy-and-open buttons.
 - Per-agent options in Settings: hide the agent, force clipboard delivery, edit the button prompts.
+
+OpenCode notes: the 2.0 CLI and the 1.x desktop app use different plugin shapes; Holdout's plugin serves both from one default export. Verified on the 2.0 CLI with a free model (`opencode run -m opencode/big-pickle`), which needs no sign-in.
