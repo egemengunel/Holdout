@@ -3,6 +3,7 @@
 //  Holdout
 //
 
+import AppKit
 import Foundation
 
 /// Registers Holdout's hook with coding agents. The scripts ship inside the app; they are copied
@@ -23,6 +24,36 @@ enum AgentInstaller {
             case .antigravity: "Antigravity"
             case .opencode: "OpenCode"
             }
+        }
+
+        /// What one connection covers, so people don't wonder about CLI versus app.
+        var coverage: String {
+            switch self {
+            case .claude: "CLI, desktop app and IDE extensions"
+            case .cursor: "Cursor's agent chat"
+            case .codex: "Codex CLI · trust the hook once with /hooks"
+            case .gemini: "Gemini CLI"
+            case .antigravity: "The agy CLI (the IDE doesn't run hooks yet)"
+            case .opencode: "OpenCode in the terminal"
+            }
+        }
+
+        /// The agent's app icon, when its app is installed.
+        var appIcon: NSImage? {
+            let names: [String] = switch self {
+            case .claude: ["Claude"]
+            case .cursor: ["Cursor"]
+            case .codex: ["Codex"]
+            case .antigravity: ["Antigravity"]
+            case .gemini, .opencode: []
+            }
+            for name in names {
+                for directory in ["/Applications", NSHomeDirectory() + "/Applications"] {
+                    let path = "\(directory)/\(name).app"
+                    if FileManager.default.fileExists(atPath: path) { return NSWorkspace.shared.icon(forFile: path) }
+                }
+            }
+            return nil
         }
 
         /// The file Holdout's entry goes in.

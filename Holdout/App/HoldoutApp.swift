@@ -42,6 +42,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         HoldoutSettings.registerDefaults()
         Task { await AgentInstaller.refreshIfInstalled() }
+        // First run: open Settings so the agents can be connected in one click.
+        if !UserDefaults.standard.bool(forKey: "didOnboard") {
+            UserDefaults.standard.set(true, forKey: "didOnboard")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                NSApp.activate()
+                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+            }
+        }
         if touchBar.install() {
             print("Holdout: Control Strip item installed")
         } else {
