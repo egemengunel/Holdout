@@ -22,7 +22,7 @@ struct HoldoutApp: App {
             Button("Quit Holdout") { NSApp.terminate(nil) }
                 .keyboardShortcut("q")
         } label: {
-            Image(nsImage: Self.menuBarIcon)
+            MenuBarLabel(icon: Self.menuBarIcon)
         }
         Settings { SettingsView() }
     }
@@ -36,20 +36,30 @@ struct HoldoutApp: App {
     }()
 }
 
+/// The menu bar icon. It's built at launch, which makes it the place to open Settings on first run.
+private struct MenuBarLabel: View {
+    let icon: NSImage
+    @Environment(\.openSettings) private var openSettings
+
+    var body: some View {
+        Image(nsImage: icon)
+            .onAppear {
+                guard !UserDefaults.standard.bool(forKey: "didOnboard") else { return }
+                UserDefaults.standard.set(true, forKey: "didOnboard")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                    NSApp.activate()
+                    openSettings()
+                }
+            }
+    }
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let touchBar = TouchBarController()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         HoldoutSettings.registerDefaults()
         Task { await AgentInstaller.refreshIfInstalled() }
-        // First run: open Settings so the agents can be connected in one click.
-        if !UserDefaults.standard.bool(forKey: "didOnboard") {
-            UserDefaults.standard.set(true, forKey: "didOnboard")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                NSApp.activate()
-                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-            }
-        }
         if touchBar.install() {
             print("Holdout: Control Strip item installed")
         } else {
