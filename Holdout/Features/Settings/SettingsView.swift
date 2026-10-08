@@ -149,8 +149,13 @@ private struct AgentIcon: View {
         Group {
             if let icon = agent.appIcon {
                 Image(nsImage: icon).resizable()
+            } else if let logo = agent.logoAsset {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(.white)
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.black.opacity(0.1)))
+                    .overlay(Image(logo).resizable().scaledToFit().padding(6))
             } else {
-                RoundedRectangle(cornerRadius: 9)
+                RoundedRectangle(cornerRadius: 8)
                     .fill(.quaternary)
                     .overlay(Image(systemName: "terminal").foregroundStyle(.secondary))
             }

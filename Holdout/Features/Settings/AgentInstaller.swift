@@ -56,6 +56,17 @@ enum AgentInstaller {
             return nil
         }
 
+        /// The logo bundled in the asset catalog, used when the agent has no app to take an icon from.
+        var logoAsset: String? {
+            switch self {
+            case .claude, .cursor: nil
+            case .codex: "AgentCodex"
+            case .gemini: "AgentGemini"
+            case .antigravity: "AgentAntigravity"
+            case .opencode: "AgentOpenCode"
+            }
+        }
+
         /// The file Holdout's entry goes in.
         fileprivate var config: URL {
             let home = FileManager.default.homeDirectoryForCurrentUser
