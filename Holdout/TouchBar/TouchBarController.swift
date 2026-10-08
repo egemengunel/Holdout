@@ -236,7 +236,7 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
             agentsView.update(visible)
         }
         if isPresented && tab == .project {
-            agentProjects.track(Array(sessions.sessions.filter { !$0.usesBridge }.sorted { $0.updatedAt > $1.updatedAt }.prefix(5)))
+            agentProjects.track(Array(sessions.sessions.filter { !self.hasBridge($0) }.sorted { $0.updatedAt > $1.updatedAt }.prefix(5)))
             failuresSeenUntil = Date.now.timeIntervalSince1970
             let feed = currentFeed
             // With a session open, its own project's Xcode build; otherwise the latest of any.
@@ -256,7 +256,7 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         sessions.sessions
             .sorted { $0.updatedAt > $1.updatedAt }
             .lazy
-            .compactMap { $0.usesBridge ? self.feeds.feeds[$0.id] : self.agentProjects.feeds[$0.id] }
+            .compactMap { self.hasBridge($0) ? self.feeds.feeds[$0.id] : self.agentProjects.feeds[$0.id] }
             .first { $0.hasContent }
     }
 
@@ -274,7 +274,7 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         }
         Self.log.info("\(action.rawValue, privacy: .public) for \(session.agentName, privacy: .public) \(session.id, privacy: .public), \(session.state.isWorking ? "working" : "idle", privacy: .public)")
 
-        if session.usesBridge {
+        if hasBridge(session) {
             write(["id": UUID().uuidString, "action": action.rawValue], for: session)
             focus(session)
             return
@@ -310,6 +310,13 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
                 focus(session)
             }
         }
+    }
+
+    /// A Claude Code session whose holdout-bridge plugin is feeding it. Without the plugin
+    /// (most people), Claude Code is treated like any other agent: git and Xcode for the
+    /// Project tab, and prompts by clipboard.
+    private func hasBridge(_ session: AgentSession) -> Bool {
+        session.usesBridge && feeds.feeds[session.id] != nil
     }
 
     private func copyToClipboard(_ prompt: String, note: String) {
@@ -378,6 +385,10 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         if let bundleID = session.app,
            let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
             NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+        } else if session.agent == "codex", let thread = URL(string: "codex://threads/\(session.id)") {
+            // The ChatGPT app's Codex runs hooks from its app-server, which names no host app;
+            // its thread id is the session id, and codex:// opens that thread.
+            NSWorkspace.shared.open(thread)
         }
         closeStrip()
     }

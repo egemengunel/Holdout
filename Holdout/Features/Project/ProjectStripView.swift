@@ -176,7 +176,9 @@ final class ProjectStripView: NSView {
     }
 
     private func actionsControl(_ feed: ProjectFeed) -> NSSegmentedControl? {
-        actions = (feed.project != nil ? [.build, .lint] : []) + (feed.repo != nil ? [.commit] : [])
+        // Lint follows the swift-design-lint mod's rules, so it shows only for people who have it.
+        let lints = FileManager.default.fileExists(atPath: DesignLint.rulesFile.path)
+        actions = (feed.project != nil ? (lints ? [.build, .lint] : [.build]) : []) + (feed.repo != nil ? [.commit] : [])
         guard !actions.isEmpty else { return nil }
         actionControl.segmentCount = actions.count
         for (segment, action) in actions.enumerated() {

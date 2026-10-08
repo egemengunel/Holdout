@@ -102,6 +102,78 @@ enum AgentInstaller {
         }
     }
 
+    enum Status {
+        case notConnected
+        case connected
+        /// Registered, but the agent won't run it until the user approves it (Codex's hook trust).
+        case needsReview
+    }
+
+    static func status(of agent: Agent) async -> Status {
+        guard agent.isInstalled else { return .notConnected }
+        guard agent == .codex else { return .connected }
+        return await codexHooksTrusted() == false ? .needsReview : .connected
+    }
+
+    /// Codex runs a hook only once the user has trusted its current hash (`/hooks` in the CLI,
+    /// or the ChatGPT app's prompt). Asks a throwaway `codex app-server` for `hooks/list`, the
+    /// call the app makes; nil when Codex can't be asked.
+    nonisolated static func codexHooksTrusted() async -> Bool? {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let daemons = (try? FileManager.default.contentsOfDirectory(atPath: "\(home)/.codex/packages/app-server-daemon/releases")) ?? []
+        let candidates = ["\(home)/.local/bin/codex", "/opt/homebrew/bin/codex", "/usr/local/bin/codex"]
+            + daemons.sorted().reversed().map { "\(home)/.codex/packages/app-server-daemon/releases/\($0)/bin/codex" }
+        guard let codex = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else { return nil }
+
+        let requests = [
+            #"{"id":1,"method":"initialize","params":{"clientInfo":{"name":"holdout","title":"Holdout","version":"1"}}}"#,
+            #"{"method":"initialized"}"#,
+            #"{"id":2,"method":"hooks/list","params":{}}"#,
+        ].joined(separator: "\n") + "\n"
+
+        return await withCheckedContinuation { continuation in
+            let process = Process()
+            let input = Pipe(), output = Pipe()
+            process.executableURL = URL(fileURLWithPath: codex)
+            process.arguments = ["app-server", "--listen", "stdio://"]
+            process.standardInput = input
+            process.standardOutput = output
+            process.standardError = FileHandle.nullDevice
+            let lock = NSLock()
+            var buffer = Data()
+            var finished = false
+            func finish(_ result: Bool?) {
+                lock.lock(); defer { lock.unlock() }
+                guard !finished else { return }
+                finished = true
+                output.fileHandleForReading.readabilityHandler = nil
+                if process.isRunning { process.terminate() }
+                continuation.resume(returning: result)
+            }
+            output.fileHandleForReading.readabilityHandler = { handle in
+                let chunk = handle.availableData
+                guard !chunk.isEmpty else { return finish(nil) }
+                lock.lock(); buffer.append(chunk); let text = String(decoding: buffer, as: UTF8.self); lock.unlock()
+                for line in text.split(separator: "\n") {
+                    guard let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+                          object["id"] as? Int == 2 else { continue }
+                    let entries = (object["result"] as? [String: Any])?["data"] as? [[String: Any]] ?? []
+                    let ours = entries.flatMap { $0["hooks"] as? [[String: Any]] ?? [] }.filter {
+                        (($0["command"] as? String) ?? ($0["handler"] as? [String: Any])?["command"] as? String ?? "").contains("holdout-hook.sh")
+                    }
+                    return finish(ours.isEmpty ? nil : ours.allSatisfy { ["trusted", "managed"].contains($0["trustStatus"] as? String) })
+                }
+            }
+            do {
+                try process.run()
+                input.fileHandleForWriting.write(Data(requests.utf8))
+            } catch {
+                return finish(nil)
+            }
+            DispatchQueue.global().asyncAfter(deadline: .now() + 10) { finish(nil) }
+        }
+    }
+
     static var support: URL {
         FileManager.default.homeDirectoryForCurrentUser.appending(path: "Library/Application Support/Holdout")
     }

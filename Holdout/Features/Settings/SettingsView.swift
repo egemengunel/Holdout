@@ -46,12 +46,12 @@ private struct GeneralSettings: View {
 }
 
 private struct AgentSettings: View {
-    @State private var installed: [AgentInstaller.Agent: Bool] = [:]
+    @State private var statuses: [AgentInstaller.Agent: AgentInstaller.Status] = [:]
     @State private var busy: Set<AgentInstaller.Agent> = []
     @State private var problem: String?
 
     private var connectable: [AgentInstaller.Agent] {
-        AgentInstaller.Agent.allCases.filter { $0.isPresent && installed[$0] != true }
+        AgentInstaller.Agent.allCases.filter { $0.isPresent && (statuses[$0] ?? .notConnected) == .notConnected }
     }
 
     var body: some View {
@@ -109,12 +109,21 @@ private struct AgentSettings: View {
             AgentIcon(agent: agent)
             VStack(alignment: .leading, spacing: 2) {
                 Text(agent.name)
-                Text(agent.coverage).font(.caption).foregroundStyle(.secondary)
+                Text(statuses[agent] == .needsReview
+                     ? "Connected, but Codex skips it until you trust it: /hooks in the CLI, or approve it in the ChatGPT app"
+                     : agent.coverage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Spacer()
             if busy.contains(agent) {
                 ProgressView().controlSize(.small)
-            } else if installed[agent] == true {
+            } else if statuses[agent] == .needsReview {
+                Label("Approve in Codex", systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                    .help("Codex runs new hooks only after you trust them: type /hooks in the Codex CLI, or approve them when the ChatGPT app asks. Then come back here.")
+                Button("Recheck", action: reload)
+            } else if statuses[agent] == .connected {
                 Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
                 Button("Remove") { change(agent, install: false) }
             } else if agent.isPresent {
@@ -126,7 +135,11 @@ private struct AgentSettings: View {
     }
 
     private func reload() {
-        installed = Dictionary(uniqueKeysWithValues: AgentInstaller.Agent.allCases.map { ($0, $0.isInstalled) })
+        Task {
+            for agent in AgentInstaller.Agent.allCases {
+                statuses[agent] = await AgentInstaller.status(of: agent)
+            }
+        }
     }
 
     private func change(_ agent: AgentInstaller.Agent, install: Bool) {
