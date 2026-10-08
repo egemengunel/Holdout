@@ -79,6 +79,11 @@ private struct MenuBarLabel: View {
     var body: some View {
         Image(nsImage: icon)
             .onAppear {
+                // Debug aid: `-HoldoutOpenSettings YES` opens Settings at launch, for screenshots.
+                if UserDefaults.standard.bool(forKey: "HoldoutOpenSettings") {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) { SettingsWindow.bringForward(openSettings) }
+                    return
+                }
                 guard !UserDefaults.standard.bool(forKey: "didOnboard") else { return }
                 UserDefaults.standard.set(true, forKey: "didOnboard")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
@@ -100,6 +105,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             print("Holdout: private Touch Bar API unavailable on this macOS")
         }
 
+        // Debug aid: `-HoldoutSnapshot <dir>` writes PNGs of every strip tab and Settings tab
+        // from the views themselves, for when the display is off.
+        if let path = UserDefaults.standard.string(forKey: "HoldoutSnapshot") {
+            let directory = URL(fileURLWithPath: path)
+            Task {
+                try? await Task.sleep(for: .seconds(3))
+                await touchBar.snapshotTouchBar(to: directory)
+                await SettingsSnapshot.run(to: directory)
+            }
+        }
+
         // Debug aid: `-HoldoutOpenOnLaunch YES` opens the strip so it can be inspected with `screencapture -b`.
         if UserDefaults.standard.bool(forKey: "HoldoutOpenOnLaunch") {
             touchBar.openStrip()
@@ -108,4 +124,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
     }
+}
+
+/// Renders the open Settings window, tab by tab, into PNGs (see `-HoldoutSnapshot`).
+@MainActor
+enum SettingsSnapshot {
+    static func run(to directory: URL) async {
+        for tab in ["General", "Agents", "Project", "Alerts", "About"] {
+            NotificationCenter.default.post(name: .holdoutSelectSettingsTab, object: tab)
+            try? await Task.sleep(for: .seconds(1))
+            guard let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "com_apple_SwiftUI_Settings_window" || $0.title.hasSuffix("Settings") || $0.title == tab }),
+                  let frame = window.contentView?.superview,
+                  let rep = frame.bitmapImageRepForCachingDisplay(in: frame.bounds) else { continue }
+            frame.cacheDisplay(in: frame.bounds, to: rep)
+            try? rep.representation(using: .png, properties: [:])?.write(to: directory.appending(path: "settings-\(tab).png"))
+        }
+    }
+}
+
+extension Notification.Name {
+    static let holdoutSelectSettingsTab = Notification.Name("holdoutSelectSettingsTab")
 }

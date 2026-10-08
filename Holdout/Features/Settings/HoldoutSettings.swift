@@ -24,6 +24,34 @@ enum HoldoutSettings {
         ])
     }
 
+    /// How the Project tab's buttons hand their prompt to an agent.
+    enum Delivery: String, CaseIterable, Identifiable {
+        /// Into the chat the way that agent allows (see `AgentInstaller.Agent.projectButtons`).
+        case automatic
+        /// Always copy it and open the agent, never type or queue it.
+        case clipboard
+
+        var id: String { rawValue }
+    }
+
+    static func deliveryKey(_ agent: String) -> String { "agent.\(agent).delivery" }
+    static func hiddenKey(_ agent: String) -> String { "agent.\(agent).hidden" }
+    static func promptKey(_ action: String) -> String { "prompt.\(action)" }
+
+    static func delivery(for agent: String) -> Delivery {
+        UserDefaults.standard.string(forKey: deliveryKey(agent)).flatMap(Delivery.init) ?? .automatic
+    }
+
+    static func isHidden(_ agent: String) -> Bool {
+        UserDefaults.standard.bool(forKey: hiddenKey(agent))
+    }
+
+    /// The user's own wording for a Project button's prompt, if they set one.
+    static func promptOverride(for action: String) -> String? {
+        let text = UserDefaults.standard.string(forKey: promptKey(action))?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text?.isEmpty == false ? text : nil
+    }
+
     static func isOn(_ key: String) -> Bool {
         UserDefaults.standard.bool(forKey: key)
     }

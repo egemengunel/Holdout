@@ -7,18 +7,31 @@ import AppKit
 import SwiftUI
 
 struct SettingsView: View {
+    /// `-HoldoutSettingsTab Agents` opens on that tab, for screenshots.
+    @State private var tab = UserDefaults.standard.string(forKey: "HoldoutSettingsTab") ?? "General"
+
     var body: some View {
-        TabView {
+        TabView(selection: $tab) {
             GeneralSettings()
                 .tabItem { Label("General", systemImage: "gearshape") }
+                .tag("General")
             AgentSettings()
                 .tabItem { Label("Agents", systemImage: "terminal") }
+                .tag("Agents")
+            ProjectSettings()
+                .tabItem { Label("Project", systemImage: "hammer") }
+                .tag("Project")
             AlertSettings()
                 .tabItem { Label("Alerts", systemImage: "bell.badge") }
+                .tag("Alerts")
             AboutSettings()
                 .tabItem { Label("About", systemImage: "info.circle") }
+                .tag("About")
         }
-        .frame(width: 540, height: 520)
+        .frame(width: 560, height: 560)
+        .onReceive(NotificationCenter.default.publisher(for: .holdoutSelectSettingsTab)) { note in
+            if let name = note.object as? String { tab = name }
+        }
     }
 }
 
@@ -58,7 +71,11 @@ private struct AgentSettings: View {
         Form {
             Section {
                 ForEach(AgentInstaller.Agent.allCases) { agent in
-                    row(agent)
+                    DisclosureGroup {
+                        AgentOptions(agent: agent)
+                    } label: {
+                        row(agent)
+                    }
                 }
             } header: {
                 HStack {
@@ -151,6 +168,90 @@ private struct AgentSettings: View {
             busy.remove(agent)
             reload()
         }
+    }
+}
+
+/// Per-agent options, under the agent's row.
+private struct AgentOptions: View {
+    let agent: AgentInstaller.Agent
+    @AppStorage private var hidden: Bool
+    @AppStorage private var delivery: String
+
+    init(agent: AgentInstaller.Agent) {
+        self.agent = agent
+        _hidden = AppStorage(wrappedValue: false, HoldoutSettings.hiddenKey(agent.rawValue))
+        _delivery = AppStorage(wrappedValue: HoldoutSettings.Delivery.automatic.rawValue, HoldoutSettings.deliveryKey(agent.rawValue))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Toggle("Show \(agent.name) sessions on the Agents tab", isOn: Binding(get: { !hidden }, set: { hidden = !$0 }))
+            Picker("Project buttons", selection: $delivery) {
+                Text("Send into the chat").tag(HoldoutSettings.Delivery.automatic.rawValue)
+                Text("Copy to clipboard").tag(HoldoutSettings.Delivery.clipboard.rawValue)
+            }
+            Text(delivery == HoldoutSettings.Delivery.clipboard.rawValue
+                 ? "Build, Lint and Commit always copy their prompt and bring \(agent.name) forward."
+                 : agent.projectButtons)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 6)
+    }
+}
+
+/// The wording of the Project tab's buttons.
+private struct ProjectSettings: View {
+    var body: some View {
+        Form {
+            Section {
+                PromptField(action: .build)
+                PromptField(action: .lint)
+                PromptField(action: .commit)
+            } header: {
+                Text("Button prompts")
+            } footer: {
+                Text("Sent to the current agent when you press a Project button. {project}, {root} and {repo} stand for the current project. Leave a field empty for the default. Claude Code with the holdout-bridge plugin uses the plugin's own prompts.")
+            }
+            Section {
+                Text("Lint appears only if you have the swift-design-lint rules. Build and Commit work with any agent.")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+private struct PromptField: View {
+    let action: ProjectStripView.Action
+    @AppStorage private var text: String
+
+    init(action: ProjectStripView.Action) {
+        self.action = action
+        _text = AppStorage(wrappedValue: "", HoldoutSettings.promptKey(action.rawValue))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Label(action.title, systemImage: action.symbol).font(.headline)
+                Spacer()
+                Button("Reset") { text = "" }.disabled(text.isEmpty)
+            }
+            TextEditor(text: $text)
+                .font(.callout)
+                .frame(height: 64)
+                .overlay(alignment: .topLeading) {
+                    if text.isEmpty {
+                        Text(action.defaultTemplate)
+                            .font(.callout)
+                            .foregroundStyle(.tertiary)
+                            .padding(.top, 8).padding(.leading, 5)
+                            .allowsHitTesting(false)
+                    }
+                }
+        }
+        .padding(.vertical, 4)
     }
 }
 

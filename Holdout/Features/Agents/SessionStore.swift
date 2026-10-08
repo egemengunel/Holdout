@@ -59,6 +59,7 @@ final class SessionStore {
     func visible(at now: Date = .now) -> [AgentSession] {
         let now = now.timeIntervalSince1970
         return sessions
+            .filter { !HoldoutSettings.isHidden($0.agent ?? "claude") }
             .filter { session in
                 switch session.state {
                 case .waiting: true

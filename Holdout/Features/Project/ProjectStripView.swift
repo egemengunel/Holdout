@@ -12,6 +12,16 @@ final class ProjectStripView: NSView {
     enum Action: String {
         case build, lint, commit
 
+        /// The built-in wording as one template, shown in Settings; {project}, {root} and {repo}
+        /// stand for the current project.
+        var defaultTemplate: String {
+            switch self {
+            case .build: "Build the Xcode project in {root} (through the Xcode MCP if you have it, otherwise xcodebuild), then list its warnings. If it fails, fix the errors and build again until it is clean. Report the warnings at the end."
+            case .lint: "In {root}, list the Swift files changed on this branch against the default branch, plus uncommitted ones. Check each against the project's CLAUDE.md design-system and architecture rules. Fix the violations, touching only the offending lines, then build once to confirm it compiles."
+            case .commit: "In {root}, review the uncommitted changes for bugs and leftovers, then propose an atomic commit grouping with messages. Do not commit yet: wait for my approval in my next message."
+            }
+        }
+
         var title: String {
             switch self {
             case .build: "Build"
@@ -31,6 +41,14 @@ final class ProjectStripView: NSView {
         /// The prompt for agents the holdout-bridge mod doesn't cover, kept in step with
         /// ios-dock's ACTIONS (the bridge sends those itself).
         func prompt(project: ProjectFeed.Project?, repo: ProjectFeed.Repo?) -> String? {
+            if let custom = HoldoutSettings.promptOverride(for: rawValue) {
+                let name = project?.name ?? repo?.name
+                guard let name else { return nil }
+                return custom
+                    .replacingOccurrences(of: "{project}", with: name)
+                    .replacingOccurrences(of: "{root}", with: project?.root ?? repo?.root ?? name)
+                    .replacingOccurrences(of: "{repo}", with: repo?.name ?? name)
+            }
             let lines: [String]? = switch self {
             case .build: project.map { p in [
                 "holdout: the user pressed Build on the Touch Bar for \(p.name).",

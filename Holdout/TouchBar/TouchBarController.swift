@@ -284,6 +284,11 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
             return
         }
 
+        if HoldoutSettings.delivery(for: session.agent ?? "claude") == .clipboard {
+            copyToClipboard(prompt, note: "Copied: paste it into \(session.agentName)")
+            focus(session)
+            return
+        }
         switch session.agent {
         case "opencode":
             write(["id": UUID().uuidString, "prompt": prompt], for: session)
@@ -377,6 +382,50 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
                 + view.subviews.flatMap { walk($0, depth + 1) }
         }
         return content.debugDescriptionForLayout + "\n" + walk(content, 0).joined(separator: "\n")
+    }
+
+    /// Debug aid for when the screen is off (lid shut, remote session): renders each tab's strip
+    /// the way it sits on the bar (tabs, content, status icon) into `directory` as PNGs, from
+    /// the views themselves rather than the display. `-HoldoutSnapshot <dir>` runs it.
+    func snapshotTouchBar(to directory: URL) async {
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let scale: CGFloat = 2
+        func render(_ view: NSView) -> NSImage? {
+            view.layoutSubtreeIfNeeded()
+            guard view.bounds.width > 0, view.bounds.height > 0,
+                  let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return nil }
+            view.cacheDisplay(in: view.bounds, to: rep)
+            let image = NSImage(size: view.bounds.size)
+            image.addRepresentation(rep)
+            return image
+        }
+        for target in Tab.allCases {
+            tab = target
+            tabs.selectedSegment = target.rawValue
+            show(target)
+            refresh()
+            try? await Task.sleep(for: .seconds(1.2))
+
+            let barWidth: CGFloat = 1004
+            let free = barWidth - tabs.fittingSize.width - 55 - 24
+            content.setFrameSize(NSSize(width: max(free, 100), height: 30))
+            let pieces = [render(tabs), render(content), render(statusIcon)].compactMap { $0 }
+            let canvas = NSImage(size: NSSize(width: barWidth, height: 30))
+            canvas.lockFocus()
+            NSColor.black.setFill()
+            NSRect(x: 0, y: 0, width: barWidth, height: 30).fill()
+            var x: CGFloat = 8
+            for (index, piece) in pieces.enumerated() {
+                if index == 2 { x = barWidth - piece.size.width - 8 }
+                piece.draw(at: NSPoint(x: x, y: (30 - piece.size.height) / 2), from: .zero, operation: .sourceOver, fraction: 1)
+                x += piece.size.width + 8
+            }
+            canvas.unlockFocus()
+            guard let tiff = canvas.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
+                  let png = rep.representation(using: .png, properties: [:]) else { continue }
+            try? png.write(to: directory.appending(path: "touchbar-\(target).png"))
+        }
+        _ = scale
     }
 
     private func focus(_ session: AgentSession) {

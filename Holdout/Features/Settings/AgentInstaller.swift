@@ -38,6 +38,18 @@ enum AgentInstaller {
             }
         }
 
+        /// What the Project tab's buttons do for this agent, from what each one lets an outside
+        /// app do (none takes text into an idle chat except OpenCode's plugin and Cursor's chat).
+        var projectButtons: String {
+            switch self {
+            case .claude: "Run in the chat through the holdout-bridge plugin; without it, copied and the app comes forward."
+            case .cursor: "Typed into the Cursor chat (needs Accessibility), or sent when its turn ends."
+            case .codex: "Sent when the turn ends. When idle, copied and the chat opens."
+            case .gemini, .antigravity: "Sent when the turn ends. When idle, copied."
+            case .opencode: "Submitted into the terminal UI through its plugin."
+            }
+        }
+
         /// The agent's app icon, when its app is installed.
         var appIcon: NSImage? {
             let names: [String] = switch self {
