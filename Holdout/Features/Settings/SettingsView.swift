@@ -7,80 +7,18 @@ import AppKit
 import SwiftUI
 
 struct SettingsView: View {
-    enum Page: String, CaseIterable, Identifiable {
-        case general = "General", agents = "Agents", alerts = "Alerts", about = "About"
-        var id: String { rawValue }
-        var symbol: String {
-            switch self {
-            case .general: "gearshape"
-            case .agents: "terminal"
-            case .alerts: "bell.badge"
-            case .about: "info.circle"
-            }
-        }
-    }
-
-    @State private var page: Page = .agents
-
     var body: some View {
-        HStack(spacing: 0) {
-            List(Page.allCases, selection: $page) { page in
-                Label(page.rawValue, systemImage: page.symbol)
-                    .tag(page)
-            }
-            .listStyle(.sidebar)
-            .frame(width: 170)
-
-            Divider()
-
-            ScrollView {
-                Group {
-                    switch page {
-                    case .general: GeneralSettings()
-                    case .agents: AgentSettings()
-                    case .alerts: AlertSettings()
-                    case .about: AboutSettings()
-                    }
-                }
-                .padding(24)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
+        TabView {
+            GeneralSettings()
+                .tabItem { Label("General", systemImage: "gearshape") }
+            AgentSettings()
+                .tabItem { Label("Agents", systemImage: "terminal") }
+            AlertSettings()
+                .tabItem { Label("Alerts", systemImage: "bell.badge") }
+            AboutSettings()
+                .tabItem { Label("About", systemImage: "info.circle") }
         }
-        .frame(width: 700, height: 500)
-    }
-}
-
-/// A titled group of rows on a rounded card.
-private struct Card<Content: View>: View {
-    var title: String?
-    var footer: String?
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let title {
-                Text(title).font(.headline)
-            }
-            VStack(alignment: .leading, spacing: 0) { content }
-                .padding(14)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12))
-            if let footer {
-                Text(footer).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 4)
-            }
-        }
-    }
-}
-
-private struct PageHeader: View {
-    let title: String
-    let subtitle: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.title2.bold())
-            Text(subtitle).foregroundStyle(.secondary)
-        }
+        .frame(width: 540, height: 520)
     }
 }
 
@@ -88,9 +26,14 @@ private struct GeneralSettings: View {
     @State private var opensAtLogin = HoldoutSettings.opensAtLogin
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            PageHeader(title: "General", subtitle: "Holdout lives in the menu bar and on the Touch Bar's Control Strip.")
-            Card(footer: "Tap the ✋ on the Control Strip to open the strip.") {
+        Form {
+            Section {
+                TouchBarPreview()
+                    .padding(.vertical, 8)
+            } footer: {
+                Text("The Control Strip icon is Holdout's status light. Tap it to open the strip.")
+            }
+            Section {
                 Toggle("Open Holdout at login", isOn: $opensAtLogin)
                     .onChange(of: opensAtLogin) { _, value in
                         HoldoutSettings.opensAtLogin = value
@@ -98,6 +41,7 @@ private struct GeneralSettings: View {
                     }
             }
         }
+        .formStyle(.grouped)
     }
 }
 
@@ -111,39 +55,32 @@ private struct AgentSettings: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            HStack(alignment: .top) {
-                PageHeader(title: "Agents", subtitle: "Connect the coding agents you use so their sessions show on the Touch Bar.")
-                Spacer()
-                if !connectable.isEmpty {
-                    Button("Connect all found (\(connectable.count))") {
-                        for agent in connectable { change(agent, install: true) }
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-            }
-
-            Card(footer: "Connecting adds a small hook to the agent's config; nothing leaves your Mac. Restart the agent afterwards.") {
-                ForEach(Array(AgentInstaller.Agent.allCases.enumerated()), id: \.element) { index, agent in
-                    if index > 0 { Divider().padding(.vertical, 8) }
+        Form {
+            Section {
+                ForEach(AgentInstaller.Agent.allCases) { agent in
                     row(agent)
                 }
+            } header: {
+                HStack {
+                    Text("Coding agents")
+                    Spacer()
+                    if !connectable.isEmpty {
+                        Button("Connect all found (\(connectable.count))") {
+                            for agent in connectable { change(agent, install: true) }
+                        }
+                        .controlSize(.small)
+                    }
+                }
+            } footer: {
+                Text("Connecting adds a small hook to the agent's config; nothing leaves your Mac. Restart the agent afterwards.")
             }
 
             if let problem {
-                Text(problem).font(.caption).foregroundStyle(.red)
+                Section { Text(problem).foregroundStyle(.red) }
             }
 
-            Card(
-                title: "Project tab",
-                footer: "Optional. Holdout reads Xcode builds and git on its own. If you use Claude Code plugins that report build or lint state, the bundled holdout-bridge plugin forwards it to the Project tab."
-            ) {
-                HStack {
-                    VStack(alignment: .leading) {
-                        Text("holdout-bridge plugin")
-                        Text("Add its folder to CLAUDE_CODE_PLUGIN_DIRS.").font(.caption).foregroundStyle(.secondary)
-                    }
-                    Spacer()
+            Section {
+                LabeledContent {
                     Button("Copy folder path") {
                         Task {
                             await AgentInstaller.syncRuntime()
@@ -151,9 +88,19 @@ private struct AgentSettings: View {
                             NSPasteboard.general.setString(AgentInstaller.bridge.path, forType: .string)
                         }
                     }
+                } label: {
+                    VStack(alignment: .leading) {
+                        Text("holdout-bridge plugin")
+                        Text("Add its folder to CLAUDE_CODE_PLUGIN_DIRS.").font(.caption).foregroundStyle(.secondary)
+                    }
                 }
+            } header: {
+                Text("Project tab")
+            } footer: {
+                Text("Optional. Holdout reads Xcode builds and git on its own. If you use Claude Code plugins that report build or lint state, this one forwards it to the Project tab.")
             }
         }
+        .formStyle(.grouped)
         .onAppear(perform: reload)
     }
 
@@ -168,14 +115,12 @@ private struct AgentSettings: View {
             if busy.contains(agent) {
                 ProgressView().controlSize(.small)
             } else if installed[agent] == true {
-                Label("Connected", systemImage: "checkmark.circle.fill")
-                    .font(.callout)
-                    .foregroundStyle(.green)
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
                 Button("Remove") { change(agent, install: false) }
             } else if agent.isPresent {
                 Button("Connect") { change(agent, install: true) }
             } else {
-                Text("Not found").font(.callout).foregroundStyle(.tertiary)
+                Text("Not found").foregroundStyle(.tertiary)
             }
         }
     }
@@ -221,21 +166,42 @@ private struct AlertSettings: View {
     @AppStorage(HoldoutSettings.Key.buildResult) private var buildResult = true
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            PageHeader(title: "Alerts", subtitle: "What the Control Strip icon flashes for.")
-            Card(title: "Quick flashes") {
-                Toggle("A session finishes", isOn: $sessionDone)
-                Divider().padding(.vertical, 8)
-                Toggle("An Xcode build succeeds or fails", isOn: $buildResult)
-                Divider().padding(.vertical, 8)
-                Toggle("A process hogs the CPU for minutes", isOn: $cpuHeadsUp)
+        Form {
+            Section {
+                alert("A session finishes", preview: .done(at: 0), isOn: $sessionDone)
+                alert("An Xcode build succeeds or fails", preview: .done(at: 0, symbol: "hammer.fill"), isOn: $buildResult)
+                alert("A process hogs the CPU for minutes", preview: .headsUp(at: 0, symbol: "cpu"), isOn: $cpuHeadsUp)
+            } header: {
+                Text("Quick flashes")
+            } footer: {
+                Text("The icon flashes once, then goes back to the hand.")
             }
-            Card(
-                title: "Stays on until you look",
-                footer: "Red appears only when Activity Monitor's memory graph turns red. A session waiting on you always shows amber."
-            ) {
-                Toggle("Memory pressure turns critical", isOn: $macDistress)
+            Section {
+                alert("Memory pressure turns critical", preview: .alert, isOn: $macDistress)
+            } header: {
+                Text("Stays on until you look")
+            } footer: {
+                Text("Red appears only when Activity Monitor's memory graph turns red. A session waiting on you always shows amber.")
             }
+            Section {
+                LabeledContent {
+                    IconPreview(pulse: .waiting)
+                } label: {
+                    Text("A session needs you")
+                }
+            } footer: {
+                Text("Always on.")
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private func alert(_ title: String, preview: IconPulse, isOn: Binding<Bool>) -> some View {
+        HStack {
+            Toggle(title, isOn: isOn)
+            Spacer()
+            IconPreview(pulse: preview)
+                .opacity(isOn.wrappedValue ? 1 : 0.35)
         }
     }
 }
@@ -258,7 +224,6 @@ private struct AboutSettings: View {
                 .foregroundStyle(.secondary)
             Link("github.com/egemengunel/Holdout", destination: URL(string: "https://github.com/egemengunel/Holdout")!)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 40)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
