@@ -23,12 +23,12 @@ struct ButtonsPane: View {
     var body: some View {
         Form {
             Section {
-                if !preview.isEmpty {
-                    TouchBarButtonsPreview(buttons: preview)
-                        .animation(.default, value: custom)
+                PaneHeader(pane: .buttons, text: "Buttons on the Touch Bar's Project tab. Each one sends a prompt to the agent you're working with, for whatever project it's in.") {
+                    if !preview.isEmpty {
+                        TouchBarButtonsPreview(buttons: preview)
+                            .animation(.default, value: custom)
+                    }
                 }
-            } footer: {
-                Text("Buttons on the Touch Bar's Project tab. Each one sends a prompt to the agent you're working with, for whatever project it's in.")
             }
 
             Section {

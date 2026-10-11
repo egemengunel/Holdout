@@ -109,9 +109,9 @@ private struct GeneralPane: View {
     var body: some View {
         Form {
             Section {
-                TouchBarPreview(pulse: .idle)
-            } footer: {
-                Text("Holdout puts your coding agents, builds and Mac on the Touch Bar. Tap the hand in the Control Strip to open it.")
+                PaneHeader(pane: .general, text: "Holdout puts your coding agents, builds and Mac on the Touch Bar. Tap the hand in the Control Strip to open it.") {
+                    TouchBarPreview(pulse: .idle)
+                }
             }
 
             Section("On the strip") {

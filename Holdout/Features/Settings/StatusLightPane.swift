@@ -42,9 +42,9 @@ struct StatusLightPane: View {
     var body: some View {
         Form {
             Section {
-                TouchBarPreview(pulse: playing)
-            } footer: {
-                Text("Holdout's icon in the Control Strip is a status light. Color says what happened; motion says how urgent. Point at a signal to see it.")
+                PaneHeader(pane: .statusLight, text: "Holdout's icon in the Control Strip is a status light. Color says what happened; motion says how urgent. Point at a signal to see it.") {
+                    TouchBarPreview(pulse: playing)
+                }
             }
             section("Stays on until you look", Self.persistent)
             section("Flashes once", Self.flashes)

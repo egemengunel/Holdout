@@ -12,13 +12,17 @@ struct AgentsPane: View {
     var body: some View {
         Form {
             Section {
+                PaneHeader(pane: .agents, text: "Holdout listens to your coding agents through a small hook in each one's config. Nothing leaves your Mac.")
+            }
+
+            Section {
                 ForEach(AgentInstaller.Agent.allCases) { agent in
                     NavigationLink(value: agent) {
                         AgentRow(agent: agent, model: model)
                     }
                 }
             } footer: {
-                Text("Holdout listens to each agent through a small hook in its config; nothing leaves your Mac. Restart an agent after connecting it.")
+                Text("Restart an agent after connecting it.")
             }
 
             if !model.connectable.isEmpty {
@@ -160,7 +164,20 @@ private struct AgentDetail: View {
     var body: some View {
         Form {
             Section {
-                AgentRow(agent: agent, model: model)
+                VStack(spacing: 8) {
+                    AgentIcon(agent: agent, size: 64)
+                    Text(agent.name).font(.title2.weight(.semibold))
+                    Text(agent.coverage)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.secondary)
+                    if model.busy.contains(agent) {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        AgentStatusLabel(agent: agent, status: model.status(agent))
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
             }
 
             Section("Setup") {

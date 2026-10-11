@@ -6,6 +6,39 @@
 import AppKit
 import SwiftUI
 
+/// The top of each pane, the way System Settings opens a pane: symbol, title, one sentence.
+struct PaneHeader<Accessory: View>: View {
+    let pane: SettingsPane
+    let text: String
+    @ViewBuilder var accessory: Accessory
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Image(systemName: pane.symbol)
+                .font(.system(size: 40))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(.tint)
+                .frame(height: 52)
+            Text(pane.title).font(.title2.weight(.semibold))
+            Text(text)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 440)
+            accessory
+                .padding(.top, 6)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+    }
+}
+
+extension PaneHeader where Accessory == EmptyView {
+    init(pane: SettingsPane, text: String) {
+        self.init(pane: pane, text: text) { EmptyView() }
+    }
+}
+
 /// A numbered setup checklist, one row per step: done steps get a check, the first open one is
 /// highlighted. Put it in a Form section (or a stack) for the rows' container.
 struct StepList: View {
