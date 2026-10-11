@@ -70,7 +70,7 @@ struct WelcomeView: View {
     }
 
     private var agents: some View {
-        page(still: "WelcomeAgents", title: "Which agents do you use?", subtitle: "Nudge adds a small hook to each one's config, so it can see when sessions work, wait and finish. Nothing leaves your Mac.") {
+        page(header: TouchBarStage(plate: .strip) { AgentsArrivingBar() }, title: "Which agents do you use?", subtitle: "Nudge adds a small hook to each one's config, so it can see when sessions work, wait and finish. Nothing leaves your Mac.") {
             VStack(spacing: 0) {
                 ForEach(AgentInstaller.Agent.allCases) { agent in
                     let status = model.status(agent)
@@ -109,7 +109,7 @@ struct WelcomeView: View {
 
     private var setup: some View {
         let agents = AgentInstaller.Agent.allCases.filter { model.status($0) != .notConnected || model.busy.contains($0) }
-        return page(still: "WelcomeSetup", title: "Finish setting up", subtitle: agents.isEmpty
+        return page(header: CinematicStill(name: "WelcomeSetup"), title: "Finish setting up", subtitle: agents.isEmpty
                     ? "No agents are connected yet. You can connect them any time in Settings › Agents."
                     : "A few agents need one more thing before Nudge can see them.") {
             ScrollView {
@@ -147,11 +147,8 @@ struct WelcomeView: View {
     }
 
     private var buttons: some View {
-        page(still: "WelcomeButtons", title: "Pick your Project buttons", subtitle: "The Project tab has buttons that send a prompt to the agent you're working with. Build and Commit are built in; add any of these too. You can edit them or make your own in Settings › Buttons.") {
+        page(header: TouchBarStage(plate: .strip) { ProjectBar(buttons: chosenBarButtons) }, title: "Pick your Project buttons", subtitle: "The Project tab has buttons that send a prompt to the agent you're working with. Build and Commit are built in; add any of these too. You can edit them or make your own in Settings › Buttons.") {
             VStack(spacing: 14) {
-                TouchBarButtonsPreview(buttons: [("Build", "hammer"), ("Commit", "checkmark.circle")]
-                    + CustomAction.presets.filter { chosenButtons.contains($0.title) }.map { ($0.title, $0.symbol) })
-                    .animation(.default, value: chosenButtons)
                 // An eager Grid, so the cards slide in with the page (a lazy one only fades in).
                 Grid(horizontalSpacing: 10, verticalSpacing: 10) {
                     ForEach(Array(stride(from: 0, to: CustomAction.presets.count, by: 2)), id: \.self) { start in
@@ -170,7 +167,8 @@ struct WelcomeView: View {
 
     private var done: some View {
         VStack(spacing: 0) {
-            CinematicStill(name: "WelcomeDone")
+            // The session's done: the bar flashes its green check.
+            TouchBarStage(plate: .wide, clip: "BarSessionDone")
             VStack(spacing: 14) {
                 Text("You're all set").font(.largeTitle.weight(.semibold))
                 Text("Tap the hand in the Control Strip, at the right end of the Touch Bar, to open Nudge. Settings live in the menu bar under the same hand.")
@@ -191,10 +189,16 @@ struct WelcomeView: View {
         .padding(.top, 28)
     }
 
-    /// A step page: a still from the film across the top, dissolving into the title.
-    private func page<Content: View>(still: String, title: String, subtitle: String, @ViewBuilder content: () -> Content) -> some View {
+    /// The Project tab's buttons as picked so far, for the bar on the buttons page.
+    private var chosenBarButtons: [ProjectBar.Button] {
+        [ProjectBar.Button(title: "Build", symbol: "hammer"), ProjectBar.Button(title: "Commit", symbol: "checkmark.circle")]
+            + CustomAction.presets.filter { chosenButtons.contains($0.title) }.map { ProjectBar.Button(title: $0.title, symbol: $0.symbol) }
+    }
+
+    /// A step page: a render across the top, dissolving into the title.
+    private func page<Header: View, Content: View>(header: Header, title: String, subtitle: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            CinematicStill(name: still)
+            header
             stepContent(title: title, subtitle: subtitle, content: content)
                 .padding(.top, -44)
         }

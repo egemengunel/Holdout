@@ -77,6 +77,8 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
     private var buildSucceededAt: TimeInterval?
     /// Same, for the Mac tab's alerts.
     private var macAlertsSeenUntil = Date.now.timeIntervalSince1970
+    /// Recording aid: a state forced from `Design/Film/nudge-demo.sh` (see `listenForDemoCommands`).
+    private var demoPulse: IconPulse?
 
     private lazy var tabs = NSSegmentedControl(
         images: Tab.allCases.map { NSImage(systemSymbolName: $0.symbol, accessibilityDescription: $0.label)! },
@@ -234,12 +236,12 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         // while another works still gets its check); a session waiting on you still wins.
         let flash = headsUp.map { IconPulse.headsUp(at: $0.at, symbol: $0.symbol) } ?? celebration
         statusIcon.show(
-            failed ? .alert
+            demoPulse ?? (failed ? .alert
                 : buildFailed ?? (waiting ? .waiting
-                : flash ?? (working > 0 ? .working : .idle)),
+                : flash ?? (working > 0 ? .working : .idle))),
             reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         )
-        statusIcon.setCount(!failed && buildFailed == nil && !waiting && flash == nil && working > 0 ? working : nil)
+        statusIcon.setCount(demoPulse == nil && !failed && buildFailed == nil && !waiting && flash == nil && working > 0 ? working : nil)
 
         if isPresented && tab == .agents {
             agentsView.update(visible)
@@ -460,6 +462,40 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
             try? png.write(to: directory.appending(path: "touchbar-\(target).png"))
         }
         _ = scale
+    }
+
+    /// Recording aid for the Welcome film (`Design/Film`): launched with `-NudgeDemoControl YES`,
+    /// Nudge takes commands as distributed notifications, so the strip can be driven while it's
+    /// recorded with nobody at the Touch Bar: `open`, `close`, `tab <0-3>`, `scroll start|end`, `pulse alert|cpu|off`.
+    func listenForDemoCommands() {
+        guard UserDefaults.standard.bool(forKey: "NudgeDemoControl") else { return }
+        DistributedNotificationCenter.default().addObserver(forName: .init("com.egemen.Nudge.demo"), object: nil, queue: .main) { [weak self] note in
+            let words = (note.object as? String ?? "").split(separator: " ").map(String.init)
+            MainActor.assumeIsolated {
+                guard let self, let command = words.first else { return }
+                switch command {
+                case "open": self.openStrip()
+                case "close": self.closeStrip()
+                case "tab":
+                    guard let tab = words.dropFirst().first.flatMap(Int.init).flatMap(Tab.init) else { return }
+                    self.tab = tab
+                    self.tabs.selectedSegment = tab.rawValue
+                    self.show(tab)
+                case "scroll":
+                    self.projectView.scroll(toEnd: words.dropFirst().first == "end")
+                    return
+                case "pulse":
+                    let now = Date.now.timeIntervalSince1970
+                    self.demoPulse = switch words.dropFirst().first {
+                    case "alert": .alert
+                    case "cpu": .headsUp(at: now, symbol: "cpu")
+                    default: nil
+                    }
+                default: return
+                }
+                self.refresh()
+            }
+        }
     }
 
     private func focus(_ session: AgentSession, closingStrip: Bool = true) {

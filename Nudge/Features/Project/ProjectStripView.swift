@@ -212,6 +212,14 @@ final class ProjectStripView: NSView {
         return actionControl
     }
 
+    /// Recording aid (`nudge-demo scroll start|end`): shows either end of an overflowing strip.
+    func scroll(toEnd: Bool) {
+        layoutSubtreeIfNeeded()
+        let x = toEnd ? max(0, stack.fittingSize.width - scrollView.contentView.bounds.width) : 0
+        scrollView.contentView.scroll(to: NSPoint(x: x, y: 0))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+    }
+
     /// Shown after the actions for a few seconds; the owner's next update draws it.
     func note(_ text: String, for seconds: Double = 4) {
         noteLabel.stringValue = text

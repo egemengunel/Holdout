@@ -104,6 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        touchBar.listenForDemoCommands()
         // Debug aid: `-NudgeOpenOnLaunch YES` opens the strip so it can be inspected with `screencapture -b`.
         if UserDefaults.standard.bool(forKey: "NudgeOpenOnLaunch") {
             touchBar.openStrip()
