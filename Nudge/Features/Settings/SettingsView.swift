@@ -111,9 +111,13 @@ struct SettingsView: View {
             NavigationStack(path: $path) {
                 detail(pane ?? .general)
                     .navigationTitle((pane ?? .general).title)
+                    // Black, like the welcome guide, so the renders dissolve into the page.
+                    .scrollContentBackground(.hidden)
+                    .background(Color.black)
             }
         }
         .frame(minWidth: 640, minHeight: 440)
+        .preferredColorScheme(.dark)
         .onChange(of: pane) { path = NavigationPath() }
         .onAppear { DispatchQueue.main.async { NudgeWindows.closeIfUnrequested() } }
         .onReceive(NotificationCenter.default.publisher(for: .nudgeSelectSettingsTab)) { note in
@@ -151,7 +155,7 @@ private struct GeneralPane: View {
         Form {
             Section {
                 PaneHeader(pane: .general, text: "Nudge puts your coding agents, builds and Mac on the Touch Bar. Tap the hand in the Control Strip to open it.") {
-                    TouchBarPreview(pulse: .idle)
+                    TouchBarStage(plate: .bar, clip: "BarWorking")
                 }
             }
 

@@ -14,3 +14,20 @@ with real recordings of Nudge's Touch Bar on its bar.
    1–2 s a frame at 40%, 6 s at 75%) and cuts them with dissolves into `renders/nudge-film.mp4`.
 4. **Bake.** `bake.sh renders/nudge-film.mp4 WelcomeFilm.mp4 0.16 0.22 0.22` blurs and fades the
    edges into pure black; `stills.sh renders <out>` grabs and bakes the poster and page stills.
+
+## The live bar
+
+Most pages don't play the film: they show a **plate**, a render with the Touch Bar switched off,
+and the app draws onto its bar (`TouchBarStage`): a recording of the real bar, real pieces of
+captured strips, or controls that follow your choices (`LiveBars.swift`).
+
+5. **Plates.** `plates.py <dir> 100 [Bar,Strip,Right,Wide]` renders each framing with Cycles and
+   writes where the bar's screen lands in it; `plates-bake.py <dir> ../../Nudge/Resources/Welcome`
+   crops them around the bar, bakes their edges into black and writes `Plates.json`.
+6. **The strip.** `record-strip.sh` records what needs the strip open or a state that can't happen
+   on demand (sessions arriving, the Project tab, a memory alert, a CPU heads-up). It drives a
+   copy of Nudge launched with `-NudgeDemoControl YES` through `nudge-demo` (`open`, `close`,
+   `tab <n>`, `scroll start|end`, `pulse alert|cpu|off`), quits and restores yours, and keeps your
+   sessions and settings out of it. Keep touching the trackpad while it runs: the Touch Bar
+   switches off when the Mac is idle, and only a real touch wakes it. Then `ingest.sh` trims the
+   takes into the app's clips.

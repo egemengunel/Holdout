@@ -1,7 +1,7 @@
 #!/bin/zsh
 zmodload zsh/datetime
 # record.sh <name> <seconds>: captures the Touch Bar as fast as it can, then makes a 30 fps clip
-out=${0:h}/recordings/$1; rm -rf $out; mkdir -p $out
+out=${0:A:h}/recordings/$1; rm -rf $out; mkdir -p $out
 [[ -x ${0:h}/wake ]] || swiftc -O ${0:h}/wake.swift -o ${0:h}/wake
 ${0:h}/wake; sleep 0.3
 end=$(( $(date +%s) + $2 ))
@@ -22,4 +22,4 @@ with open(os.path.join(d,'list.txt'),'w') as l:
     l.write(f"file '{fs[-1]}'\n")
 print(len(fs),'frames', f"{len(fs)/(ts[-1]-ts[0]):.1f} fps")
 PY
-ffmpeg -loglevel error -y -f concat -safe 0 -i $out/list.txt -vf "fps=30,format=yuv420p" -c:v libx264 -crf 12 ${0:h}/recordings/$1.mp4
+ffmpeg -loglevel error -y -f concat -safe 0 -i $out/list.txt -vf "fps=30,format=yuv420p" -c:v libx264 -crf 12 ${0:A:h}/recordings/$1.mp4

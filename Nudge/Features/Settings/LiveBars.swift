@@ -64,7 +64,7 @@ struct ProjectBar: View {
             StripContent {
                 HStack(spacing: 0) {
                     barImage("BarProjectPills")?.resizable().frame(width: 244.5, height: 30)
-                    ButtonCapsule(buttons: buttons)
+                    if !buttons.isEmpty { ButtonCapsule(buttons: buttons) }
                 }
             }
         }
@@ -99,8 +99,19 @@ private struct ButtonCapsule: View {
     }
 }
 
-/// The Agents tab as sessions start one after another, then again.
+/// The Agents tab as sessions start one after another: the real recording when there is one
+/// (`Design/Film/record-strip.sh`), else real session pills from a capture, arriving in turn.
 struct AgentsArrivingBar: View {
+    var body: some View {
+        if Cinematic.url("BarAgentsArriving", "mp4") != nil {
+            BarVideo(name: "BarAgentsArriving")
+        } else {
+            ArrivingPills()
+        }
+    }
+}
+
+private struct ArrivingPills: View {
     private static let pills: [(name: String, width: CGFloat)] = [
         ("BarPillCursor", 195.5), ("BarPillCodex", 196), ("BarPillClaude", 53.5),
     ]

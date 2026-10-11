@@ -1,5 +1,5 @@
 //
-//  TouchBarPreview.swift
+//  IconPreview.swift
 //  Nudge
 //
 
@@ -64,35 +64,4 @@ struct IconPreview: View {
             return (0.15 + 0.55 * (1 - wave(local / (length / 2))), true)
         }
     }
-}
-
-/// A mock of the Touch Bar with Nudge's strip open and the Control Strip icon playing `pulse`.
-struct TouchBarPreview: View {
-    let pulse: IconPulse
-    /// Which tab shows as selected.
-    var tab = "terminal"
-
-    var body: some View {
-        HStack(spacing: 8) {
-            ForEach(["terminal", "iphone", "hammer", "memorychip"], id: \.self) { symbol in
-                Image(systemName: symbol)
-                    .font(.system(size: 14))
-                    .frame(width: 44, height: 30)
-                    .background(Color.white.opacity(symbol == tab ? 0.24 : 0.12), in: RoundedRectangle(cornerRadius: 6))
-                    .foregroundStyle(.white)
-            }
-            Spacer(minLength: 12)
-            IconPreview(pulse: pulse)
-                .id(pulse.previewID)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(.black, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .frame(maxWidth: .infinity)
-    }
-}
-
-private extension IconPulse {
-    /// Restarts the preview's timeline when the state changes.
-    var previewID: String { "\(self)" }
 }

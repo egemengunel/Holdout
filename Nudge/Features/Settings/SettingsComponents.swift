@@ -32,20 +32,26 @@ struct PaneHeader<Accessory: View>: View {
     let text: String
     @ViewBuilder var accessory: Accessory
 
+    /// The accessory (a `TouchBarStage`) runs edge to edge on the black page, and the title
+    /// sits in its faded lower edge.
     var body: some View {
-        VStack(spacing: 8) {
-            PaneIcon(pane: pane, size: 52)
-            Text(pane.title).font(.title2.weight(.semibold))
-            Text(text)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: 440)
+        VStack(spacing: 0) {
             accessory
-                .padding(.top, 6)
+            VStack(spacing: 8) {
+                PaneIcon(pane: pane, size: 44)
+                Text(pane.title).font(.title2.weight(.semibold))
+                Text(text)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: 440)
+            }
+            .padding(.top, Accessory.self == EmptyView.self ? 12 : -30)
+            .padding(.bottom, 8)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
+        .listRowBackground(Color.clear)
+        .listRowInsets(EdgeInsets())
     }
 }
 

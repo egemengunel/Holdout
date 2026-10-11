@@ -24,9 +24,8 @@ struct ButtonsPane: View {
         Form {
             Section {
                 PaneHeader(pane: .buttons, text: "Buttons on the Touch Bar's Project tab. Each one sends a prompt to the agent you're working with, for whatever project it's in.") {
-                    if !preview.isEmpty {
-                        TouchBarButtonsPreview(buttons: preview)
-                            .animation(.default, value: custom)
+                    TouchBarStage(plate: .strip) {
+                        ProjectBar(buttons: preview.map { ProjectBar.Button(title: $0.title, symbol: $0.symbol) })
                     }
                 }
             }

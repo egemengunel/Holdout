@@ -47,7 +47,7 @@ struct StatusLightPane: View {
         Form {
             Section {
                 PaneHeader(pane: .statusLight, text: "Nudge's icon in the Control Strip is a status light. Color says what happened; motion says how urgent. Click a signal to see it.") {
-                    TouchBarPreview(pulse: playing)
+                    TouchBarStage(plate: .right) { Self.bar(for: selected, pulse: playing) }
                 }
                 .onGeometryChange(for: Bool.self) { $0.frame(in: .scrollView).maxY > 24 } action: { headerVisible = $0 }
             }
@@ -64,6 +64,27 @@ struct StatusLightPane: View {
             }
         }
         .animation(.snappy, value: headerVisible)
+    }
+
+    /// The bar for a signal: a real recording of it, or for the two that can't be staged on
+    /// demand (a memory crisis, a runaway process), the icon playing over an ordinary app's bar.
+    @ViewBuilder
+    private static func bar(for id: String, pulse: IconPulse) -> some View {
+        let clip: String? = switch id {
+        case "waiting": "BarWaiting"
+        case "done": "BarSessionDone"
+        case "build": "BarBuildSucceeded"
+        case "working": "BarWorking"
+        case "idle": "BarIdle"
+        case "memory": Cinematic.url("BarAlert", "mp4") == nil ? nil : "BarAlert"
+        case "cpu": Cinematic.url("BarCPU", "mp4") == nil ? nil : "BarCPU"
+        default: nil
+        }
+        if let clip {
+            BarVideo(name: clip).id(clip)
+        } else {
+            PulseOverIdleBar(pulse: pulse).id(id)
+        }
     }
 
     private func section(_ title: String, _ signals: [Signal]) -> some View {

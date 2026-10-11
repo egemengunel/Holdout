@@ -40,6 +40,7 @@ enum NudgeWindows {
             guard let window = existingSettingsWindow else { return }
             settings = window
             window.isRestorable = false
+            window.backgroundColor = .black
             window.collectionBehavior.insert(.moveToActiveSpace)
             window.makeKeyAndOrderFront(nil)
             window.orderFrontRegardless()
