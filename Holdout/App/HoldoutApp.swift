@@ -22,11 +22,21 @@ struct HoldoutApp: App {
             Button("Quit Holdout") { NSApp.terminate(nil) }
                 .keyboardShortcut("q")
         } label: {
-            Image(nsImage: Self.menuBarIcon)
+            MenuBarLabel(icon: Self.menuBarIcon)
         }
+
+        // A `Window` rather than a `Settings` scene, which can't be resized. Opened through
+        // `HoldoutWindows.showSettings`, which also makes Holdout a regular app meanwhile.
+        settings
+    }
+
+    private var settings: some Scene {
+        Window("Settings", id: HoldoutWindows.settingsID) {
+            SettingsView()
+        }
+        .defaultSize(width: 780, height: 580)
+        .windowResizability(.contentMinSize)
         .commands {
-            // Settings is an AppKit-hosted window (see `HoldoutWindows`), so the App menu's
-            // item, shown while Settings makes Holdout a regular app, opens it by hand.
             CommandGroup(replacing: .appSettings) {
                 Button("Settings…") { HoldoutWindows.showSettings() }
                     .keyboardShortcut(",")
@@ -41,6 +51,17 @@ struct HoldoutApp: App {
         image.isTemplate = true
         return image
     }()
+}
+
+/// The menu bar icon. It exists from launch, so it hands SwiftUI's window opener to `HoldoutWindows`.
+private struct MenuBarLabel: View {
+    let icon: NSImage
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Image(nsImage: icon)
+            .onAppear { HoldoutWindows.openWindow = openWindow }
+    }
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {

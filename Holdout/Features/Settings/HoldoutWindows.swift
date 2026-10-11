@@ -6,8 +6,9 @@
 import AppKit
 import SwiftUI
 
-/// Holdout's two windows, Settings and the welcome guide, hosted in AppKit windows so Settings
-/// can be resized and remembers its frame (SwiftUI's `Settings` scene is fixed-size).
+/// Holdout's two windows. Settings is a SwiftUI `Window` scene, so the system builds its chrome
+/// like Apple's own apps (a floating sidebar holding the traffic lights on macOS 26+); the
+/// welcome guide is an AppKit window with a hidden title bar.
 ///
 /// A background (accessory) app's activation is only a request on macOS 14+, so its windows open
 /// behind whatever is frontmost. While one is open Holdout becomes a regular app (Dock icon,
@@ -15,16 +16,41 @@ import SwiftUI
 /// keeps working.
 @MainActor
 enum HoldoutWindows {
+    static let settingsID = "settings"
+    /// SwiftUI's action for opening scenes, captured from the menu bar label, which exists from launch.
+    static var openWindow: OpenWindowAction?
     private static var settings: NSWindow?
     private static var welcome: NSWindow?
     private static let delegate = Delegate()
+    private static var closeObserver: NSObjectProtocol?
+    /// Whether Holdout asked for Settings. SwiftUI also opens a `Window` scene at launch and
+    /// restores it after a relaunch (only macOS 15+ can turn that off), so an unasked one closes.
+    private(set) static var settingsRequested = false
 
     static func showSettings(_ pane: SettingsPane? = nil) {
-        let window = settings ?? makeSettings()
-        settings = window
-        window.title = settingsTitle
+        settingsRequested = true
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        openWindow?(id: settingsID)
         if let pane { NotificationCenter.default.post(name: .holdoutSelectSettingsTab, object: pane.rawValue) }
-        bringForward(window)
+        // The window exists only after SwiftUI handles the action.
+        DispatchQueue.main.async {
+            guard let window = NSApp.windows.first(where: { $0.identifier?.rawValue.hasPrefix(settingsID) == true }) else { return }
+            settings = window
+            window.isRestorable = false
+            window.makeKeyAndOrderFront(nil)
+            window.orderFrontRegardless()
+            guard closeObserver == nil else { return }
+            closeObserver = NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { _ in
+                MainActor.assumeIsolated {
+                    if let closeObserver { NotificationCenter.default.removeObserver(closeObserver) }
+                    closeObserver = nil
+                    settings = nil
+                    settingsRequested = false
+                    if welcome?.isVisible != true { NSApp.setActivationPolicy(.accessory) }
+                }
+            }
+        }
     }
 
     static func showWelcome() {
@@ -37,29 +63,16 @@ enum HoldoutWindows {
         welcome?.close()
     }
 
-    /// The selected pane's name, shown as the window title; set by `SettingsView`, which can
-    /// pick a pane before its window exists.
-    static var settingsTitle = SettingsPane.general.title {
-        didSet { settings?.title = settingsTitle }
+    /// Closes a Settings window SwiftUI opened on its own; called as `SettingsView` appears.
+    static func closeIfUnrequested() {
+        guard !settingsRequested else { return }
+        for window in NSApp.windows where window.identifier?.rawValue.hasPrefix(settingsID) == true {
+            window.close()
+        }
     }
 
     /// The open Settings window, for `SettingsSnapshot`.
     static var settingsWindow: NSWindow? { settings }
-
-    private static func makeSettings() -> NSWindow {
-        let hosting = NSHostingController(rootView: SettingsView())
-        hosting.sizingOptions = [.minSize]
-        hosting.sceneBridgingOptions = [.toolbars, .title]
-        let window = NSWindow(contentViewController: hosting)
-        window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
-        window.toolbarStyle = .unified
-        window.isReleasedWhenClosed = false
-        window.delegate = delegate
-        window.setContentSize(NSSize(width: 780, height: 580))
-        window.center()
-        window.setFrameAutosaveName("HoldoutSettings")
-        return window
-    }
 
     private static func makeWelcome() -> NSWindow {
         let hosting = NSHostingController(rootView: WelcomeView())

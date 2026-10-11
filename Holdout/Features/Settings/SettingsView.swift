@@ -66,6 +66,8 @@ struct SettingsView: View {
                     .tag(pane)
             }
             .searchable(text: $search, placement: .sidebar)
+            // The sidebar toggle stays: a toolbar item is what lets the sidebar run the full
+            // height with the traffic lights in it.
             .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 260)
         } detail: {
             NavigationStack(path: $path) {
@@ -75,7 +77,7 @@ struct SettingsView: View {
         }
         .frame(minWidth: 640, minHeight: 440)
         .onChange(of: pane) { path = NavigationPath() }
-        .onChange(of: pane, initial: true) { HoldoutWindows.settingsTitle = (pane ?? .general).title }
+        .onAppear { DispatchQueue.main.async { HoldoutWindows.closeIfUnrequested() } }
         .onReceive(NotificationCenter.default.publisher(for: .holdoutSelectSettingsTab)) { note in
             if let name = note.object as? String, let selected = SettingsPane(rawValue: name) { pane = selected }
         }
@@ -119,6 +121,7 @@ private struct GeneralPane: View {
                         Text(tab.text)
                     } icon: {
                         Image(systemName: tab.symbol)
+                            .frame(width: 22)
                     }
                 }
             }
