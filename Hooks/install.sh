@@ -1,17 +1,18 @@
 #!/bin/sh
-# Registers holdout-hook.sh with coding agents so their sessions show on the Touch Bar.
+# Registers nudge-hook.sh with coding agents so their sessions show on the Touch Bar.
 #
 #   Hooks/install.sh                  every agent found on this Mac
 #   Hooks/install.sh codex gemini     just these (claude cursor codex gemini antigravity opencode)
-#   Hooks/install.sh --remove [agent...]   take Holdout's entries back out
+#   Hooks/install.sh --remove [agent...]   take Nudge's entries back out
 #
-# Safe to re-run: earlier Holdout entries are replaced, everything else is kept.
+# Safe to re-run: earlier Nudge entries, including ones from when the app was called Holdout,
+# are replaced; everything else is kept.
 
 set -u
 remove=0
 [ "${1:-}" = "--remove" ] && { remove=1; shift; }
 hooks_dir=$(cd "$(dirname "$0")" && pwd)
-hook="$hooks_dir/holdout-hook.sh"
+hook="$hooks_dir/nudge-hook.sh"
 quoted="\"$hook\""
 chmod +x "$hook"
 
@@ -22,11 +23,11 @@ update() {
   file=$1; shift
   mkdir -p "$(dirname "$file")" || return
   [ -s "$file" ] || echo '{}' > "$file"
-  if /usr/bin/jq "$@" "$file" > "$file.holdout-tmp" 2>/dev/null; then
-    mv -f "$file.holdout-tmp" "$file"
+  if /usr/bin/jq "$@" "$file" > "$file.nudge-tmp" 2>/dev/null; then
+    mv -f "$file.nudge-tmp" "$file"
     echo "  updated $file"
   else
-    rm -f "$file.holdout-tmp"
+    rm -f "$file.nudge-tmp"
     echo "  could not parse $file; left it unchanged" >&2
   fi
 }
@@ -38,7 +39,7 @@ register() {
     .hooks //= {}
     | reduce $events[] as $event (.;
         .hooks[$event] = ([.hooks[$event][]?
-                            | .hooks |= map(select(.command | tostring | contains("holdout-hook.sh") | not))
+                            | .hooks |= map(select(.command | tostring | test("(nudge|holdout)-hook[.]sh") | not))
                             | select(.hooks | length > 0)]
                           + [{hooks: [{type: "command", command: $command, timeout: $timeout}]}]))'
 }
@@ -56,14 +57,14 @@ install_claude() {
 install_cursor() {
   echo "Cursor"
   events='["sessionStart","beforeSubmitPrompt","preToolUse","postToolUse","postToolUseFailure","stop","sessionEnd","beforeShellExecution","beforeMCPExecution"]'
-  if [ -f "$HOME/.claude/settings.json" ] && grep -q holdout-hook.sh "$HOME/.claude/settings.json"; then
+  if [ -f "$HOME/.claude/settings.json" ] && grep -Eq "(nudge|holdout)-hook.sh" "$HOME/.claude/settings.json"; then
     events='["beforeShellExecution","beforeMCPExecution"]'
   fi
   update "$HOME/.cursor/hooks.json" --arg command "$quoted cursor" --argjson events "$events" '
     .version //= 1
     | .hooks //= {}
     | reduce $events[] as $event (.;
-        .hooks[$event] = ([.hooks[$event][]? | select(.command | tostring | contains("holdout-hook.sh") | not)]
+        .hooks[$event] = ([.hooks[$event][]? | select(.command | tostring | test("(nudge|holdout)-hook[.]sh") | not)]
                           + [{command: $command, timeout: 5}]))'
 }
 
@@ -81,12 +82,12 @@ install_gemini() {
 }
 
 # Antigravity's payloads don't name their event, so each one passes it. No PreToolUse:
-# its reply must be a permission decision, and Holdout never makes one.
+# its reply must be a permission decision, and Nudge never makes one.
 install_antigravity() {
   echo "Antigravity"
   update "$HOME/.gemini/config/hooks.json" --arg command "$quoted antigravity" '
     def run($event): {type: "command", command: "\($command) \($event)", timeout: 5};
-    .holdout = {
+    del(.holdout) | .nudge = {
       PreInvocation: [run("PreInvocation")],
       PostToolUse: [{matcher: "*", hooks: [run("PostToolUse")]}],
       Stop: [run("Stop")]
@@ -95,9 +96,10 @@ install_antigravity() {
 
 install_opencode() {
   echo "OpenCode"
-  plugin="$HOME/.config/opencode/plugins/holdout.js"
+  plugin="$HOME/.config/opencode/plugins/nudge.js"
   mkdir -p "$(dirname "$plugin")"
-  printf 'export { default } from "%s"\n' "$hooks_dir/opencode/holdout.js" > "$plugin"
+  rm -f "$HOME/.config/opencode/plugins/holdout.js"
+  printf 'export { default } from "%s"\n' "$hooks_dir/opencode/nudge.js" > "$plugin"
   echo "  wrote $plugin"
 }
 
@@ -111,18 +113,18 @@ if [ $# -eq 0 ]; then
 fi
 [ $# -gt 0 ] || { echo "No supported agents found."; exit 0; }
 
-# Removal: drop every entry that runs holdout-hook.sh, and any group left empty.
+# Removal: drop every entry that runs nudge-hook.sh, and any group left empty.
 unregister() {
   file=$1
   [ -s "$file" ] || return 0
   update "$file" '
-    def mine: tostring | contains("holdout-hook.sh");
+    def mine: tostring | test("(nudge|holdout)-hook[.]sh");
     if .hooks then
       .hooks |= (with_entries(.value |= (map(if .hooks then (.hooks |= map(select(.command | mine | not))) | select(.hooks | length > 0)
                                              else select(.command | mine | not) end)))
                  | with_entries(select(.value | length > 0)))
     else . end
-    | del(.holdout)'
+    | del(.nudge, .holdout)'
 }
 
 remove_agent() {
@@ -132,7 +134,7 @@ remove_agent() {
     codex) unregister "$HOME/.codex/hooks.json" ;;
     gemini) unregister "$HOME/.gemini/settings.json" ;;
     antigravity) unregister "$HOME/.gemini/config/hooks.json" ;;
-    opencode) rm -f "$HOME/.config/opencode/plugins/holdout.js"; echo "  removed OpenCode plugin" ;;
+    opencode) rm -f "$HOME/.config/opencode/plugins/nudge.js" "$HOME/.config/opencode/plugins/holdout.js"; echo "  removed OpenCode plugin" ;;
     *) echo "Unknown agent: $1" >&2 ;;
   esac
 }

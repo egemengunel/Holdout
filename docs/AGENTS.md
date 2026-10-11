@@ -3,7 +3,7 @@
 Researched October 2026 from each agent's docs, plus tests on a real Mac where noted.
 "Idle chat" means a chat that isn't mid-turn.
 
-| Agent | Status in Holdout | Prompt into an idle chat | While a turn runs | Deep links |
+| Agent | Status in Nudge | Prompt into an idle chat | While a turn runs | Deep links |
 |---|---|---|---|---|
 | Claude Code (CLI, desktop, IDE) | Hooks in `~/.claude/settings.json`; one entry covers all three | a Claude Code plugin can submit it; otherwise clipboard | plugin | `claude://code/new?q=&folder=` (desktop) and `claude-cli://open?q=&cwd=` (terminal) open a new session with the prompt pre-filled, never sent |
 | Cursor | Reads Claude's hooks; native `~/.cursor/hooks.json` adds shell/MCP hooks | Accessibility paste into the chat input (`CursorChat`) | follow-up at Stop | `cursor.com/link/prompt?text=` pre-fills a new chat; nothing auto-runs, `&` handling is unreliable, 8,000 chars max |
@@ -21,7 +21,7 @@ Ideas for apps that can't take prompts
 - Show repo state the agent can't: branch, dirty file count, ahead/behind, last Xcode build (already there), and Build / Commit as copy-and-open buttons.
 - Per-agent options in Settings: hide the agent, force clipboard delivery, edit the button prompts.
 
-OpenCode notes: the 2.0 CLI and the 1.x desktop app use different plugin shapes; Holdout's plugin serves both from one default export. Verified on the 2.0 CLI with a free model (`opencode run -m opencode/big-pickle`), which needs no sign-in.
+OpenCode notes: the 2.0 CLI and the 1.x desktop app use different plugin shapes; Nudge's plugin serves both from one default export. Verified on the 2.0 CLI with a free model (`opencode run -m opencode/big-pickle`), which needs no sign-in.
 
 Verified October 2026: Antigravity CLI (`agy -p`) reports a session through the registered hooks (PreInvocation, PostToolUse, Stop). The Antigravity desktop app is installed but its hook behavior isn't verified.
 
