@@ -6,9 +6,10 @@
 import SwiftUI
 
 /// What the Control Strip icon can show, in priority order, with the optional ones switchable.
-/// Selecting a row plays it on the preview, so this is the legend and the settings in one.
+/// Clicking a row plays it on the preview (and in the row), so this is the legend and the settings
+/// in one. Once the header scrolls away, a floating copy of the icon keeps playing it at the top.
 struct StatusLightPane: View {
-    private struct Signal: Identifiable {
+    fileprivate struct Signal: Identifiable {
         let id: String
         let pulse: IconPulse
         let title: String
@@ -34,48 +35,78 @@ struct StatusLightPane: View {
     ]
 
     @State private var selected = "waiting"
+    @State private var headerVisible = true
 
-    private var playing: IconPulse {
-        (Self.persistent + Self.flashes + Self.ambient).first { $0.id == selected }?.pulse ?? .idle
+    private var current: Signal? {
+        (Self.persistent + Self.flashes + Self.ambient).first { $0.id == selected }
     }
+
+    private var playing: IconPulse { current?.pulse ?? .idle }
 
     var body: some View {
         Form {
             Section {
-                PaneHeader(pane: .statusLight, text: "Nudge's icon in the Control Strip is a status light. Color says what happened; motion says how urgent. Point at a signal to see it.") {
+                PaneHeader(pane: .statusLight, text: "Nudge's icon in the Control Strip is a status light. Color says what happened; motion says how urgent. Click a signal to see it.") {
                     TouchBarPreview(pulse: playing)
                 }
+                .onGeometryChange(for: Bool.self) { $0.frame(in: .scrollView).maxY > 24 } action: { headerVisible = $0 }
             }
             section("Stays on until you look", Self.persistent)
             section("Flashes once", Self.flashes)
             section("In the background", Self.ambient)
         }
         .formStyle(.grouped)
+        .overlay(alignment: .top) {
+            if !headerVisible, let current {
+                NowPlaying(signal: current)
+                    .padding(.top, 10)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.snappy, value: headerVisible)
     }
 
     private func section(_ title: String, _ signals: [Signal]) -> some View {
         Section(title) {
             ForEach(signals) { signal in
-                SignalRow(signal: signal)
+                SignalRow(signal: signal, isSelected: signal.id == selected)
                     .contentShape(Rectangle())
-                    .onHover { if $0 { selected = signal.id } }
+                    .onTapGesture { selected = signal.id }
+                    .accessibilityAddTraits(signal.id == selected ? [.isButton, .isSelected] : .isButton)
+                    .accessibilityAction { selected = signal.id }
             }
         }
     }
 
     private struct SignalRow: View {
         let signal: Signal
+        let isSelected: Bool
         @AppStorage private var isOn: Bool
 
-        init(signal: Signal) {
+        init(signal: Signal, isSelected: Bool) {
             self.signal = signal
+            self.isSelected = isSelected
             _isOn = AppStorage(wrappedValue: true, signal.key ?? "statusLight.unused")
         }
 
         var body: some View {
             HStack(spacing: 12) {
-                StaticIcon(pulse: signal.pulse)
-                    .opacity(signal.key == nil || isOn ? 1 : 0.35)
+                Group {
+                    if isSelected {
+                        IconPreview(pulse: signal.pulse)
+                            .scaleEffect(0.73)
+                            .frame(width: 40, height: 22)
+                    } else {
+                        StaticIcon(pulse: signal.pulse)
+                    }
+                }
+                .opacity(signal.key == nil || isOn ? 1 : 0.35)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 7)
+                        .strokeBorder(Color.accentColor, lineWidth: 2)
+                        .padding(-3)
+                        .opacity(isSelected ? 1 : 0)
+                }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(signal.title)
                     Text(signal.detail)
@@ -94,6 +125,31 @@ struct StatusLightPane: View {
                 }
             }
             .padding(.vertical, 2)
+        }
+    }
+}
+
+/// The selected signal, floating over the pane once the header's preview has scrolled out of sight.
+private struct NowPlaying: View {
+    let signal: StatusLightPane.Signal
+
+    var body: some View {
+        let content = HStack(spacing: 10) {
+            IconPreview(pulse: signal.pulse)
+                .id(signal.id)
+            Text(signal.title)
+                .font(.callout.weight(.medium))
+        }
+        .padding(.leading, 6)
+        .padding(.trailing, 14)
+        .padding(.vertical, 6)
+
+        if #available(macOS 26, *) {
+            content.glassEffect(.regular, in: .capsule)
+        } else {
+            content
+                .background(.regularMaterial, in: Capsule())
+                .shadow(color: .black.opacity(0.15), radius: 8, y: 2)
         }
     }
 }
