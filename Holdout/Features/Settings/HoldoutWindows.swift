@@ -29,15 +29,18 @@ enum HoldoutWindows {
 
     static func showSettings(_ pane: SettingsPane? = nil) {
         settingsRequested = true
+        // Before activating: an existing window on another desktop would otherwise pull you there.
+        existingSettingsWindow?.collectionBehavior.insert(.moveToActiveSpace)
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         openWindow?(id: settingsID)
         if let pane { NotificationCenter.default.post(name: .holdoutSelectSettingsTab, object: pane.rawValue) }
         // The window exists only after SwiftUI handles the action.
         DispatchQueue.main.async {
-            guard let window = NSApp.windows.first(where: { $0.identifier?.rawValue.hasPrefix(settingsID) == true }) else { return }
+            guard let window = existingSettingsWindow else { return }
             settings = window
             window.isRestorable = false
+            window.collectionBehavior.insert(.moveToActiveSpace)
             window.makeKeyAndOrderFront(nil)
             window.orderFrontRegardless()
             guard closeObserver == nil else { return }
@@ -51,6 +54,10 @@ enum HoldoutWindows {
                 }
             }
         }
+    }
+
+    private static var existingSettingsWindow: NSWindow? {
+        NSApp.windows.first { $0.identifier?.rawValue.hasPrefix(settingsID) == true }
     }
 
     static func showWelcome() {
@@ -82,6 +89,7 @@ enum HoldoutWindows {
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.isMovableByWindowBackground = true
+        window.collectionBehavior.insert(.moveToActiveSpace)
         window.title = "Welcome to Holdout"
         window.isReleasedWhenClosed = false
         window.delegate = delegate
