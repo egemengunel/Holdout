@@ -75,8 +75,7 @@ struct SettingsView: View {
         }
         .frame(minWidth: 640, minHeight: 440)
         .onChange(of: pane) { path = NavigationPath() }
-        // A task, so it runs once the window exists.
-        .task(id: pane) { HoldoutWindows.settingsWindow?.title = (pane ?? .general).title }
+        .onChange(of: pane, initial: true) { HoldoutWindows.settingsTitle = (pane ?? .general).title }
         .onReceive(NotificationCenter.default.publisher(for: .holdoutSelectSettingsTab)) { note in
             if let name = note.object as? String, let selected = SettingsPane(rawValue: name) { pane = selected }
         }

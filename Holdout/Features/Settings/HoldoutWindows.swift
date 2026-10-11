@@ -22,6 +22,7 @@ enum HoldoutWindows {
     static func showSettings(_ pane: SettingsPane? = nil) {
         let window = settings ?? makeSettings()
         settings = window
+        window.title = settingsTitle
         if let pane { NotificationCenter.default.post(name: .holdoutSelectSettingsTab, object: pane.rawValue) }
         bringForward(window)
     }
@@ -36,6 +37,12 @@ enum HoldoutWindows {
         welcome?.close()
     }
 
+    /// The selected pane's name, shown as the window title; set by `SettingsView`, which can
+    /// pick a pane before its window exists.
+    static var settingsTitle = SettingsPane.general.title {
+        didSet { settings?.title = settingsTitle }
+    }
+
     /// The open Settings window, for `SettingsSnapshot`.
     static var settingsWindow: NSWindow? { settings }
 
@@ -46,7 +53,6 @@ enum HoldoutWindows {
         let window = NSWindow(contentViewController: hosting)
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
         window.toolbarStyle = .unified
-        window.title = SettingsPane.general.title
         window.isReleasedWhenClosed = false
         window.delegate = delegate
         window.setContentSize(NSSize(width: 780, height: 580))
