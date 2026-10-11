@@ -147,10 +147,15 @@ struct WelcomeView: View {
                 TouchBarButtonsPreview(buttons: [("Build", "hammer"), ("Commit", "checkmark.circle")]
                     + CustomAction.presets.filter { chosenButtons.contains($0.title) }.map { ($0.title, $0.symbol) })
                     .animation(.default, value: chosenButtons)
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                    ForEach(CustomAction.presets, id: \.title) { preset in
-                        PresetCard(preset: preset, isOn: chosenButtons.contains(preset.title)) {
-                            if chosenButtons.contains(preset.title) { chosenButtons.remove(preset.title) } else { chosenButtons.insert(preset.title) }
+                // An eager Grid, so the cards slide in with the page (a lazy one only fades in).
+                Grid(horizontalSpacing: 10, verticalSpacing: 10) {
+                    ForEach(Array(stride(from: 0, to: CustomAction.presets.count, by: 2)), id: \.self) { start in
+                        GridRow {
+                            ForEach(CustomAction.presets[start..<min(start + 2, CustomAction.presets.count)], id: \.title) { preset in
+                                PresetCard(preset: preset, isOn: chosenButtons.contains(preset.title)) {
+                                    if chosenButtons.contains(preset.title) { chosenButtons.remove(preset.title) } else { chosenButtons.insert(preset.title) }
+                                }
+                            }
                         }
                     }
                 }

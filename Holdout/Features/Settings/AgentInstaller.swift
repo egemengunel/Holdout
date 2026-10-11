@@ -50,10 +50,14 @@ enum AgentInstaller {
 
         /// The agent's app icon, when its app is installed.
         var appIcon: NSImage? {
+            // Codex merged into the ChatGPT app (July 2026), which kept Codex's bundle id.
+            if self == .codex, let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.openai.codex") {
+                return NSWorkspace.shared.icon(forFile: url.path)
+            }
             let names: [String] = switch self {
             case .claude: ["Claude"]
             case .cursor: ["Cursor"]
-            case .codex: ["Codex"]
+            case .codex: ["ChatGPT", "Codex"]
             case .antigravity: ["Antigravity"]
             case .opencode: []
             }
