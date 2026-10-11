@@ -135,7 +135,8 @@ private struct NowPlaying: View {
 
     var body: some View {
         let content = HStack(spacing: 10) {
-            IconPreview(pulse: signal.pulse)
+            // Concentric with the capsule: its radius (21) less the 6 pt inset.
+            IconPreview(pulse: signal.pulse, cornerRadius: 15)
                 .id(signal.id)
             Text(signal.title)
                 .font(.callout.weight(.medium))

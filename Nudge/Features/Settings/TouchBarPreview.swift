@@ -11,6 +11,8 @@ import SwiftUI
 /// It mirrors the motion in `IconPulse.animation` (the real icon is Core Animation layers).
 struct IconPreview: View {
     let pulse: IconPulse
+    /// 6 matches the Touch Bar's buttons; a container can round it further to sit concentrically.
+    var cornerRadius: CGFloat = 6
     /// Seconds of stillness between loops of the one-shot flashes.
     private let rest: TimeInterval = 1.2
 
@@ -19,7 +21,7 @@ struct IconPreview: View {
             let t = timeline.date.timeIntervalSinceReferenceDate
             let (intensity, showsState) = Self.frame(pulse, at: t, rest: rest)
             ZStack {
-                RoundedRectangle(cornerRadius: 6)
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .fill(Color(nsColor: Self.tint(pulse, intensity)))
                 Image(systemName: showsState ? pulse.symbol : IconPulse.idleSymbol)
                     .font(.system(size: 15, weight: pulse.symbol == "checkmark" ? .semibold : .regular))
