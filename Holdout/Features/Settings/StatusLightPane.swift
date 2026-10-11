@@ -42,7 +42,7 @@ struct StatusLightPane: View {
     var body: some View {
         Form {
             Section {
-                PaneHeader(pane: .statusLight, text: "Holdout's icon in the Control Strip is a status light. Color says what happened; motion says how urgent. Select a signal to see it.") {
+                PaneHeader(pane: .statusLight, text: "Holdout's icon in the Control Strip is a status light. Color says what happened; motion says how urgent. Point at a signal to see it.") {
                     TouchBarPreview(pulse: playing)
                 }
             }
@@ -56,21 +56,19 @@ struct StatusLightPane: View {
     private func section(_ title: String, _ signals: [Signal]) -> some View {
         Section(title) {
             ForEach(signals) { signal in
-                SignalRow(signal: signal, isSelected: selected == signal.id)
+                SignalRow(signal: signal)
                     .contentShape(Rectangle())
-                    .onTapGesture { selected = signal.id }
+                    .onHover { if $0 { selected = signal.id } }
             }
         }
     }
 
     private struct SignalRow: View {
         let signal: Signal
-        let isSelected: Bool
         @AppStorage private var isOn: Bool
 
-        init(signal: Signal, isSelected: Bool) {
+        init(signal: Signal) {
             self.signal = signal
-            self.isSelected = isSelected
             _isOn = AppStorage(wrappedValue: true, signal.key ?? "statusLight.unused")
         }
 
@@ -78,12 +76,6 @@ struct StatusLightPane: View {
             HStack(spacing: 12) {
                 StaticIcon(pulse: signal.pulse)
                     .opacity(signal.key == nil || isOn ? 1 : 0.35)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 7)
-                            .strokeBorder(Color.accentColor, lineWidth: 2)
-                            .padding(-3)
-                            .opacity(isSelected ? 1 : 0)
-                    }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(signal.title)
                     Text(signal.detail)
@@ -95,8 +87,6 @@ struct StatusLightPane: View {
                 if signal.key != nil {
                     Toggle(signal.title, isOn: $isOn)
                         .labelsHidden()
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
                 } else {
                     Text("Always")
                         .font(.callout)

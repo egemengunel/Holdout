@@ -6,44 +6,30 @@
 import AppKit
 import SwiftUI
 
-/// A white symbol on a colored rounded square, like System Settings' sidebar icons.
-struct SymbolTile: View {
-    let symbol: String
-    let tint: Color
-    var size: CGFloat = 20
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: size * 0.26, style: .continuous)
-            .fill(tint.gradient)
-            .overlay {
-                Image(systemName: symbol)
-                    .font(.system(size: size * 0.55, weight: .medium))
-                    .foregroundStyle(.white)
-            }
-            .frame(width: size, height: size)
-    }
-}
-
-/// The card at the top of each pane: what this pane is for, in a sentence.
+/// The top of each pane, the way System Settings opens a pane: symbol, title, one sentence.
 struct PaneHeader<Accessory: View>: View {
     let pane: SettingsPane
     let text: String
     @ViewBuilder var accessory: Accessory
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .center, spacing: 14) {
-                SymbolTile(symbol: pane.symbol, tint: pane.tint, size: 44)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(pane.title).font(.title2.weight(.semibold))
-                    Text(text)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
+        VStack(spacing: 8) {
+            Image(systemName: pane.symbol)
+                .font(.system(size: 40))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(.tint)
+                .frame(height: 52)
+            Text(pane.title).font(.title2.weight(.semibold))
+            Text(text)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 440)
             accessory
+                .padding(.top, 6)
         }
-        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
     }
 }
 
@@ -53,70 +39,55 @@ extension PaneHeader where Accessory == EmptyView {
     }
 }
 
-/// A numbered setup checklist. Done steps get a check; the first open one is highlighted.
+/// A numbered setup checklist, one row per step: done steps get a check, the first open one is
+/// highlighted. Put it in a Form section (or a stack) for the rows' container.
 struct StepList: View {
     let steps: [AgentGuide.Step]
 
     var body: some View {
         let current = steps.firstIndex { !$0.isDone }
-        VStack(alignment: .leading, spacing: 12) {
-            ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    marker(index: index, done: step.isDone, current: index == current)
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(step.title)
-                            .fontWeight(index == current ? .medium : .regular)
-                            .foregroundStyle(step.isDone ? .secondary : .primary)
-                        if let detail = step.detail {
-                            Text(detail)
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        if let code = step.code {
-                            CopyableCode(text: code)
-                        }
-                        if let button = step.button, !step.isDone || step.buttonStaysWhenDone {
-                            Button(button.title, action: button.action)
-                                .controlSize(.small)
-                        }
+        ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Image(systemName: step.isDone ? "checkmark.circle.fill" : "\(index + 1).circle\(index == current ? ".fill" : "")")
+                    .foregroundStyle(step.isDone ? AnyShapeStyle(.green) : index == current ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                    .imageScale(.large)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(step.title)
+                        .fontWeight(index == current ? .medium : .regular)
+                        .foregroundStyle(step.isDone ? .secondary : .primary)
+                    if let detail = step.detail {
+                        Text(detail)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    Spacer(minLength: 0)
+                    if let code = step.code {
+                        CopyableCode(text: code)
+                    }
+                    if let button = step.button, !step.isDone || step.buttonStaysWhenDone {
+                        Button(button.title, action: button.action)
+                    }
                 }
+                Spacer(minLength: 0)
             }
+            .padding(.vertical, 2)
         }
-    }
-
-    private func marker(index: Int, done: Bool, current: Bool) -> some View {
-        ZStack {
-            Circle()
-                .fill(done ? AnyShapeStyle(Color.green) : current ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.quaternary))
-            if done {
-                Image(systemName: "checkmark").font(.system(size: 9, weight: .bold))
-            } else {
-                Text("\(index + 1)").font(.system(size: 10, weight: .semibold).monospacedDigit())
-            }
-        }
-        .foregroundStyle(done || current ? .white : .secondary)
-        .frame(width: 18, height: 18)
-        .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
     }
 }
 
-/// A line to paste into a terminal, with a copy button.
+/// A line to paste into a terminal, selectable, with a Copy button.
 struct CopyableCode: View {
     let text: String
     @State private var copied = false
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(alignment: .firstTextBaseline) {
             Text(text)
-                .font(.system(.caption, design: .monospaced))
+                .font(.system(.callout, design: .monospaced))
                 .textSelection(.enabled)
-                .lineLimit(2)
-                .truncationMode(.middle)
-            Spacer(minLength: 0)
-            Button {
+                .lineLimit(3)
+            Spacer(minLength: 8)
+            Button(copied ? "Copied" : "Copy") {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(text, forType: .string)
                 copied = true
@@ -124,31 +95,8 @@ struct CopyableCode: View {
                     try? await Task.sleep(for: .seconds(1.5))
                     copied = false
                 }
-            } label: {
-                Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                    .contentTransition(.symbolEffect(.replace))
             }
-            .buttonStyle(.borderless)
-            .help("Copy")
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-    }
-}
-
-/// Connected / needs approval / not connected, as a small colored capsule.
-struct StatusBadge: View {
-    let title: String
-    let color: Color
-
-    var body: some View {
-        Text(title)
-            .font(.caption.weight(.medium))
-            .foregroundStyle(color)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(color.opacity(0.14), in: Capsule())
     }
 }
 

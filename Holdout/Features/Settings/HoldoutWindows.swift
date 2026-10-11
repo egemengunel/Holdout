@@ -46,7 +46,7 @@ enum HoldoutWindows {
         let window = NSWindow(contentViewController: hosting)
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
         window.toolbarStyle = .unified
-        window.title = "Holdout Settings"
+        window.title = SettingsPane.general.title
         window.isReleasedWhenClosed = false
         window.delegate = delegate
         window.setContentSize(NSSize(width: 780, height: 580))

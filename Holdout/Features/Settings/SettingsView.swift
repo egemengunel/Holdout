@@ -25,21 +25,22 @@ enum SettingsPane: String, CaseIterable, Identifiable {
 
     var symbol: String {
         switch self {
-        case .general: "gearshape.fill"
-        case .agents: "terminal.fill"
-        case .buttons: "square.grid.2x2.fill"
-        case .statusLight: "light.beacon.max.fill"
-        case .about: "hand.raised.fill"
+        case .general: "gearshape"
+        case .agents: "terminal"
+        case .buttons: "square.grid.2x2"
+        case .statusLight: "light.beacon.max"
+        case .about: "info.circle"
         }
     }
 
-    var tint: Color {
+    /// Extra words the sidebar's search matches.
+    var keywords: [String] {
         switch self {
-        case .general: .gray
-        case .agents: .indigo
-        case .buttons: .blue
-        case .statusLight: .orange
-        case .about: .pink
+        case .general: ["login", "startup", "welcome", "strip"]
+        case .agents: ["claude", "cursor", "codex", "chatgpt", "antigravity", "opencode", "hooks", "connect", "mods"]
+        case .buttons: ["project", "prompt", "build", "commit", "custom"]
+        case .statusLight: ["alerts", "flash", "icon", "memory", "cpu", "notifications"]
+        case .about: ["version", "github"]
         }
     }
 }
@@ -47,26 +48,35 @@ enum SettingsPane: String, CaseIterable, Identifiable {
 struct SettingsView: View {
     /// `-HoldoutSettingsTab Agents` opens on that pane, for screenshots.
     @State private var pane: SettingsPane? = UserDefaults.standard.string(forKey: "HoldoutSettingsTab").flatMap(SettingsPane.init) ?? .general
+    @State private var path = NavigationPath()
+    @State private var search = ""
+
+    private var panes: [SettingsPane] {
+        let query = search.trimmingCharacters(in: .whitespaces)
+        guard !query.isEmpty else { return SettingsPane.allCases }
+        return SettingsPane.allCases.filter { pane in
+            ([pane.title] + pane.keywords).contains { $0.localizedCaseInsensitiveContains(query) }
+        }
+    }
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $pane) {
-                ForEach(SettingsPane.allCases) { pane in
-                    Label {
-                        Text(pane.title)
-                    } icon: {
-                        SymbolTile(symbol: pane.symbol, tint: pane.tint)
-                    }
+            List(panes, selection: $pane) { pane in
+                Label(pane.title, systemImage: pane.symbol)
                     .tag(pane)
-                }
             }
-            .navigationSplitViewColumnWidth(min: 170, ideal: 190, max: 240)
-            .toolbar(removing: .sidebarToggle)
+            .searchable(text: $search, placement: .sidebar)
+            .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 260)
         } detail: {
-            detail(pane ?? .general)
-                .navigationTitle((pane ?? .general).title)
+            NavigationStack(path: $path) {
+                detail(pane ?? .general)
+                    .navigationTitle((pane ?? .general).title)
+            }
         }
         .frame(minWidth: 640, minHeight: 440)
+        .onChange(of: pane) { path = NavigationPath() }
+        // A task, so it runs once the window exists.
+        .task(id: pane) { HoldoutWindows.settingsWindow?.title = (pane ?? .general).title }
         .onReceive(NotificationCenter.default.publisher(for: .holdoutSelectSettingsTab)) { note in
             if let name = note.object as? String, let selected = SettingsPane(rawValue: name) { pane = selected }
         }
@@ -105,16 +115,11 @@ private struct GeneralPane: View {
 
             Section("On the strip") {
                 ForEach(Self.tabs, id: \.title) { tab in
-                    HStack(spacing: 12) {
+                    Label {
+                        Text(tab.title)
+                        Text(tab.text)
+                    } icon: {
                         Image(systemName: tab.symbol)
-                            .font(.system(size: 14))
-                            .foregroundStyle(.white)
-                            .frame(width: 36, height: 24)
-                            .background(.black, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(tab.title)
-                            Text(tab.text).font(.callout).foregroundStyle(.secondary)
-                        }
                     }
                 }
             }

@@ -5,31 +5,30 @@
 
 import SwiftUI
 
-/// Connect agents, follow each one's setup steps, and set how Project buttons reach it.
+/// Connect agents, then open one for its setup steps and options, like a System Settings list.
 struct AgentsPane: View {
     @State private var model = AgentConnections()
-    @State private var expanded: Set<AgentInstaller.Agent> = []
 
     var body: some View {
         Form {
             Section {
-                PaneHeader(pane: .agents, text: "Holdout listens to your coding agents through a small hook in each one's config. Nothing leaves your Mac.") {
-                    if !model.connectable.isEmpty {
-                        Button("Connect All Found (\(model.connectable.count))") { model.connectAll() }
-                    }
-                }
+                PaneHeader(pane: .agents, text: "Holdout listens to your coding agents through a small hook in each one's config. Nothing leaves your Mac.")
             }
 
             Section {
                 ForEach(AgentInstaller.Agent.allCases) { agent in
-                    DisclosureGroup(isExpanded: binding(for: agent)) {
-                        AgentDetail(agent: agent, model: model)
-                    } label: {
+                    NavigationLink(value: agent) {
                         AgentRow(agent: agent, model: model)
                     }
                 }
             } footer: {
-                Text("Restart an agent after connecting it. Removing takes Holdout's entry back out of its config.")
+                Text("Restart an agent after connecting it.")
+            }
+
+            if !model.connectable.isEmpty {
+                Section {
+                    Button("Connect All Found (\(model.connectable.count))") { model.connectAll() }
+                }
             }
 
             if let problem = model.problem {
@@ -41,18 +40,10 @@ struct AgentsPane: View {
             }
         }
         .formStyle(.grouped)
-        .task {
-            await model.reload()
-            // Open the ones that are half set up, so the next step is in view.
-            expanded.formUnion(AgentInstaller.Agent.allCases.filter { model.statuses[$0] == .needsReview })
+        .navigationDestination(for: AgentInstaller.Agent.self) { agent in
+            AgentDetail(agent: agent, model: model)
         }
-    }
-
-    private func binding(for agent: AgentInstaller.Agent) -> Binding<Bool> {
-        Binding(
-            get: { expanded.contains(agent) },
-            set: { if $0 { expanded.insert(agent) } else { expanded.remove(agent) } }
-        )
+        .task { await model.reload() }
     }
 }
 
@@ -105,38 +96,58 @@ struct AgentRow: View {
     let model: AgentConnections
 
     var body: some View {
-        HStack(spacing: 12) {
-            AgentIcon(agent: agent)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(agent.name)
-                Text(agent.coverage)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 8)
+        LabeledContent {
             if model.busy.contains(agent) {
                 ProgressView().controlSize(.small)
             } else {
-                switch model.status(agent) {
-                case .connected:
-                    StatusBadge(title: "Connected", color: .green)
-                case .needsReview:
-                    StatusBadge(title: "Needs approval", color: .orange)
-                case .notConnected:
-                    if agent.isPresent {
-                        Button("Connect") { model.change(agent, install: true) }
-                    } else {
-                        StatusBadge(title: "Not installed", color: .secondary)
-                    }
+                AgentStatusLabel(agent: agent, status: model.status(agent))
+            }
+        } label: {
+            HStack(spacing: 10) {
+                AgentIcon(agent: agent, size: 26)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(agent.name)
+                    Text(agent.coverage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
             }
         }
-        .padding(.vertical, 2)
     }
 }
 
-/// An agent's setup steps and options, under its row.
+/// Connected / needs approval / off, the way System Settings states a service's status.
+struct AgentStatusLabel: View {
+    let agent: AgentInstaller.Agent
+    let status: AgentInstaller.Status
+
+    var body: some View {
+        switch status {
+        case .connected:
+            Label("Connected", systemImage: "checkmark.circle.fill")
+                .labelStyle(StatusLabelStyle(tint: .green))
+        case .needsReview:
+            Label("Needs Approval", systemImage: "exclamationmark.triangle.fill")
+                .labelStyle(StatusLabelStyle(tint: .orange))
+        case .notConnected:
+            Text(agent.isPresent ? "Off" : "Not Installed").foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct StatusLabelStyle: LabelStyle {
+    let tint: Color
+
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 4) {
+            configuration.icon.foregroundStyle(tint)
+            configuration.title.foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// One agent's page: its status, setup steps, options and removal.
 private struct AgentDetail: View {
     let agent: AgentInstaller.Agent
     let model: AgentConnections
@@ -151,68 +162,90 @@ private struct AgentDetail: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            StepList(steps: AgentGuide.steps(
-                for: agent,
-                status: model.status(agent),
-                connect: { model.change(agent, install: true) },
-                recheck: { model.recheck(agent) }
-            ))
-
-            if agent == .claude {
-                ClaudeModsSummary()
+        Form {
+            Section {
+                VStack(spacing: 8) {
+                    AgentIcon(agent: agent, size: 64)
+                    Text(agent.name).font(.title2.weight(.semibold))
+                    Text(agent.coverage)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.secondary)
+                    if model.busy.contains(agent) {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        AgentStatusLabel(agent: agent, status: model.status(agent))
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
             }
 
-            Divider()
+            Section("Setup") {
+                StepList(steps: AgentGuide.steps(
+                    for: agent,
+                    status: model.status(agent),
+                    connect: { model.change(agent, install: true) },
+                    recheck: { model.recheck(agent) }
+                ))
+            }
 
-            VStack(alignment: .leading, spacing: 10) {
-                Toggle("Show \(agent.name) sessions on the Agents tab", isOn: Binding(get: { !hidden }, set: { hidden = !$0 }))
+            if agent == .claude {
+                ClaudeModsSection()
+            }
+
+            Section {
+                Toggle("Show sessions on the Agents tab", isOn: Binding(get: { !hidden }, set: { hidden = !$0 }))
                 Picker("Project buttons", selection: $delivery) {
                     Text("Send into the chat").tag(HoldoutSettings.Delivery.automatic.rawValue)
                     Text("Copy to clipboard").tag(HoldoutSettings.Delivery.clipboard.rawValue)
                 }
-                .fixedSize()
+            } header: {
+                Text("Options")
+            } footer: {
                 Text(delivery == HoldoutSettings.Delivery.clipboard.rawValue
                      ? "Buttons always copy their prompt and bring \(agent.name) forward."
                      : agent.projectButtons)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            }
+
+            if let problem = model.problem {
+                Section {
+                    Label(problem, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
+                        .textSelection(.enabled)
+                }
             }
 
             if model.status(agent) != .notConnected {
-                HStack {
-                    Spacer()
-                    Button("Remove from \(agent.name)", role: .destructive) { model.change(agent, install: false) }
-                        .controlSize(.small)
+                Section {
+                    Button("Remove Holdout from \(agent.name)…", role: .destructive) { model.change(agent, install: false) }
+                } footer: {
+                    Text("Takes Holdout's entry back out of \(agent.name)'s config.")
                 }
             }
         }
-        .padding(.vertical, 10)
-        .padding(.leading, 4)
+        .formStyle(.grouped)
+        .navigationTitle(agent.name)
     }
 }
 
 /// The Claude Code mods Holdout found, and whether one is reporting to it.
-private struct ClaudeModsSummary: View {
+private struct ClaudeModsSection: View {
     @State private var mods: [ClaudeMods.Mod] = []
     @State private var reporting = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Claude Code mods").font(.subheadline.weight(.medium))
-            if mods.isEmpty && !reporting {
-                Text("None found in ~/.claude/mods.")
-                    .font(.callout).foregroundStyle(.secondary)
-            } else {
-                ForEach(mods) { mod in
-                    Label(mod.name, systemImage: "puzzlepiece.extension")
-                        .font(.callout)
-                }
-                if reporting {
-                    Label("A mod is reporting to Holdout: its buttons show on the Project tab.", systemImage: "dot.radiowaves.left.and.right")
-                        .font(.callout)
-                        .foregroundStyle(.green)
-                }
+        Section {
+            if mods.isEmpty {
+                Text("None found in ~/.claude/mods").foregroundStyle(.secondary)
+            }
+            ForEach(mods) { mod in
+                Label(mod.name, systemImage: "puzzlepiece.extension")
+            }
+        } header: {
+            Text("Claude Code Mods")
+        } footer: {
+            if reporting {
+                Text("A mod is reporting to Holdout, so its buttons show on the Project tab.")
             }
         }
         .task {

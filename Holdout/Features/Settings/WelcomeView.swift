@@ -82,7 +82,7 @@ struct WelcomeView: View {
                         }
                         Spacer()
                         if status != .notConnected {
-                            StatusBadge(title: "Connected", color: .green)
+                            AgentStatusLabel(agent: agent, status: status)
                         } else {
                             Toggle(agent.name, isOn: Binding(
                                 get: { chosenAgents.contains(agent) },
@@ -119,12 +119,14 @@ struct WelcomeView: View {
                                 Spacer()
                                 if model.busy.contains(agent) { ProgressView().controlSize(.small) }
                             }
+                            VStack(alignment: .leading, spacing: 10) {
                             StepList(steps: AgentGuide.steps(
                                 for: agent,
                                 status: model.status(agent),
                                 connect: { model.change(agent, install: true) },
                                 recheck: { model.recheck(agent) }
                             ))
+                            }
                         }
                         .padding(14)
                         .frame(maxWidth: .infinity, alignment: .leading)
