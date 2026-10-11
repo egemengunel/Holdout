@@ -113,6 +113,9 @@ enum AgentInstaller {
         }
     }
 
+    /// How many agents have Nudge's hook registered.
+    static var connectedCount: Int { Agent.allCases.filter(\.isInstalled).count }
+
     enum Status {
         case notConnected
         case connected

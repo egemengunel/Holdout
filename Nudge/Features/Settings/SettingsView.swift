@@ -45,11 +45,11 @@ enum SettingsPane: String, CaseIterable, Identifiable {
     }
 
     /// The sidebar's second line: what's in the pane, at a glance.
-    var summary: String {
+    func summary(connected: Int) -> String {
         switch self {
         case .general: "Login, the strip, setup"
         case .agents:
-            switch AgentInstaller.Agent.allCases.filter(\.isInstalled).count {
+            switch connected {
             case 0: "None connected yet"
             case 1: "1 agent connected"
             case let count: "\(count) agents connected"
@@ -77,6 +77,7 @@ struct SettingsView: View {
     @State private var pane: SettingsPane? = UserDefaults.standard.string(forKey: "NudgeSettingsTab").flatMap(SettingsPane.init) ?? .general
     @State private var path = NavigationPath()
     @State private var search = ""
+    @State private var connected = AgentInstaller.connectedCount
 
     private var panes: [SettingsPane] {
         let query = search.trimmingCharacters(in: .whitespaces)
@@ -93,7 +94,7 @@ struct SettingsView: View {
                     PaneIcon(pane: pane, size: 30)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(pane.title)
-                        Text(pane.summary)
+                        Text(pane.summary(connected: connected))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -118,6 +119,9 @@ struct SettingsView: View {
         .onReceive(NotificationCenter.default.publisher(for: .nudgeSelectSettingsTab)) { note in
             if let name = note.object as? String, let selected = SettingsPane(rawValue: name) { pane = selected }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .nudgeAgentsChanged)) { _ in
+            connected = AgentInstaller.connectedCount
+        }
     }
 
     @ViewBuilder
@@ -134,7 +138,7 @@ struct SettingsView: View {
 
 private struct GeneralPane: View {
     @State private var opensAtLogin = NudgeSettings.opensAtLogin
-    @State private var connected = 0
+    @State private var connected = AgentInstaller.connectedCount
 
     private static let tabs: [(symbol: String, title: String, text: String)] = [
         ("terminal", "Agents", "Every coding agent session: working, waiting on you, or done."),
@@ -182,8 +186,8 @@ private struct GeneralPane: View {
             }
         }
         .formStyle(.grouped)
-        .task {
-            connected = AgentInstaller.Agent.allCases.filter(\.isInstalled).count
+        .onReceive(NotificationCenter.default.publisher(for: .nudgeAgentsChanged)) { _ in
+            connected = AgentInstaller.connectedCount
         }
     }
 }

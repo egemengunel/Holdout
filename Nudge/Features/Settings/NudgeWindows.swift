@@ -132,4 +132,6 @@ enum NudgeWindows {
 extension Notification.Name {
     /// Object: a `SettingsPane` raw value.
     static let nudgeSelectSettingsTab = Notification.Name("nudgeSelectSettingsTab")
+    /// Posted after an agent is connected or removed.
+    static let nudgeAgentsChanged = Notification.Name("nudgeAgentsChanged")
 }

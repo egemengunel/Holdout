@@ -79,6 +79,7 @@ final class AgentConnections {
             if let failure { problem = "\(agent.name): \(failure)" }
             busy.remove(agent)
             statuses[agent] = await AgentInstaller.status(of: agent)
+            NotificationCenter.default.post(name: .nudgeAgentsChanged, object: nil)
         }
     }
 
