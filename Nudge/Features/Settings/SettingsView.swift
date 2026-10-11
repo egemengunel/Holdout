@@ -44,6 +44,22 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         }
     }
 
+    /// The sidebar's second line: what's in the pane, at a glance.
+    var summary: String {
+        switch self {
+        case .general: "Login, the strip, setup"
+        case .agents:
+            switch AgentInstaller.Agent.allCases.filter(\.isInstalled).count {
+            case 0: "None connected yet"
+            case 1: "1 agent connected"
+            case let count: "\(count) agents connected"
+            }
+        case .buttons: "Prompts on the Project tab"
+        case .statusLight: "What the icon tells you"
+        case .about: "Version and source"
+        }
+    }
+
     /// Extra words the sidebar's search matches.
     var keywords: [String] {
         switch self {
@@ -73,17 +89,23 @@ struct SettingsView: View {
     var body: some View {
         NavigationSplitView {
             List(panes, selection: $pane) { pane in
-                Label {
-                    Text(pane.title)
-                } icon: {
-                    PaneIcon(pane: pane)
+                HStack(spacing: 10) {
+                    PaneIcon(pane: pane, size: 30)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(pane.title)
+                        Text(pane.summary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
+                .padding(.vertical, 4)
                 .tag(pane)
             }
             .searchable(text: $search, placement: .sidebar)
             // The sidebar toggle stays: a toolbar item is what lets the sidebar run the full
             // height with the traffic lights in it.
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 260)
+            .navigationSplitViewColumnWidth(min: 210, ideal: 230, max: 280)
         } detail: {
             NavigationStack(path: $path) {
                 detail(pane ?? .general)
