@@ -89,19 +89,29 @@ enum NudgeWindows {
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.isMovableByWindowBackground = true
-        window.collectionBehavior.insert(.moveToActiveSpace)
         window.title = "Welcome to Nudge"
         window.isReleasedWhenClosed = false
         window.delegate = delegate
-        window.center()
         return window
     }
 
+    /// Shows the window on the current desktop, centered on the display the pointer is on,
+    /// before activating, so activation never switches desktops.
     private static func bringForward(_ window: NSWindow) {
+        window.collectionBehavior.insert(.moveToActiveSpace)
+        // SwiftUI sizes the window only after it shows; size it now so the centering holds.
+        if let content = window.contentViewController?.view, content.fittingSize.width > 0 {
+            window.setContentSize(content.fittingSize)
+        }
+        let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main
+        if let visible = screen?.visibleFrame {
+            let size = window.frame.size
+            window.setFrameOrigin(NSPoint(x: visible.midX - size.width / 2, y: visible.midY - size.height / 2))
+        }
+        window.orderFrontRegardless()
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
-        window.orderFrontRegardless()
     }
 
     private final class Delegate: NSObject, NSWindowDelegate {

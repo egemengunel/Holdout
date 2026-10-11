@@ -74,7 +74,7 @@ enum AgentInstaller {
         var logoAsset: String? {
             switch self {
             case .claude, .cursor: nil
-            case .codex: "AgentCodex"
+            case .codex: "AgentChatGPT"
             case .antigravity: "AgentAntigravity"
             case .opencode: "AgentOpenCode"
             }
