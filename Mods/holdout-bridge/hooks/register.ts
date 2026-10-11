@@ -94,7 +94,7 @@ async function takeCommand($: EngineInterface) {
   const text = await $.fs.read(path).catch(() => '')
   if (!text.trim()) return
 
-  let command: { id?: string; action?: string }
+  let command: { id?: string; action?: string; prompt?: string }
   try {
     command = JSON.parse(text)
   } catch {
@@ -105,7 +105,8 @@ async function takeCommand($: EngineInterface) {
   await $.fs.write(path, '')
 
   const [repo, project] = await Promise.all([$.state.get(REPO), $.state.get(PROJECT)])
-  const lines = PROMPTS[command.action ?? '']?.(project.value ?? null, repo.value ?? null)
+  // A button made in Holdout's Settings arrives already worded.
+  const lines = command.prompt ? [command.prompt] : PROMPTS[command.action ?? '']?.(project.value ?? null, repo.value ?? null)
   if (lines) $.clock.after(1, () => void $.prompt.submit({ text: lines.join('\n\n') }))
 }
 

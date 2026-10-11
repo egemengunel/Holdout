@@ -118,6 +118,8 @@
 				"rm -rf \"$runtime\"",
 				"mkdir -p \"$runtime\"",
 				"rsync -a --exclude .DS_Store \"$SRCROOT/Hooks\" \"$runtime/\"",
+				"mkdir -p \"$runtime/Mods\"",
+				"rsync -a --exclude .DS_Store --exclude node_modules \"$SRCROOT/Mods/holdout-bridge\" \"$runtime/Mods/\"",
 				"",
 			);
 		};

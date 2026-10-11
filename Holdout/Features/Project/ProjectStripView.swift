@@ -6,7 +6,7 @@
 import AppKit
 
 /// The Project tab: which project and branch you're in, news only when there is some
-/// (a build result, a TestFlight ship), and the Build and Commit actions.
+/// (a build result, a TestFlight ship), and the Build and Commit actions plus the user's own.
 final class ProjectStripView: NSView {
     /// A Project button. Build and Commit are built in; a feed can offer others by id, which
     /// only its own source (a Claude Code plugin) knows how to run.
@@ -27,16 +27,28 @@ final class ProjectStripView: NSView {
             }
         }
 
-        /// The prompt a built-in button sends; nil for feed-defined buttons.
+        init(id: String, title: String, symbol: String) {
+            self.id = id
+            self.title = title
+            self.symbol = symbol
+        }
+
+        init(_ custom: CustomAction) {
+            self.init(id: custom.actionID, title: custom.title, symbol: custom.symbol)
+        }
+
+        /// One the user made in Settings, which Holdout words itself whoever runs the session.
+        var isCustom: Bool { id.hasPrefix(CustomAction.prefix) }
+
+        /// The prompt a built-in or custom button sends; nil for feed-defined buttons.
         func prompt(project: ProjectFeed.Project?, repo: ProjectFeed.Repo?) -> String? {
+            if isCustom {
+                let custom = HoldoutSettings.customActions.first { $0.actionID == id }
+                return custom.flatMap { CustomAction.fill($0.prompt, project: project, repo: repo) }
+            }
             guard id == "build" || id == "commit" else { return nil }
             if let custom = HoldoutSettings.promptOverride(for: id) {
-                let name = project?.name ?? repo?.name
-                guard let name else { return nil }
-                return custom
-                    .replacingOccurrences(of: "{project}", with: name)
-                    .replacingOccurrences(of: "{root}", with: project?.root ?? repo?.root ?? name)
-                    .replacingOccurrences(of: "{repo}", with: repo?.name ?? name)
+                return CustomAction.fill(custom, project: project, repo: repo)
             }
             let lines: [String]? = id == "build"
                 ? project.map { p in [
@@ -187,7 +199,9 @@ final class ProjectStripView: NSView {
             actions = offered.map { Action(id: $0.id, title: $0.title, symbol: $0.symbol) }
         } else {
             actions = (feed.project != nil ? [.build] : []) + (feed.repo != nil ? [.commit] : [])
+            actions = actions.filter { HoldoutSettings.showsBuiltIn($0.id) }
         }
+        actions += HoldoutSettings.customActions.map { Action($0) }
         guard !actions.isEmpty else { return nil }
         actionControl.segmentCount = actions.count
         for (segment, action) in actions.enumerated() {

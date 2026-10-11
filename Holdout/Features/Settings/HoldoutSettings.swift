@@ -13,6 +13,8 @@ enum HoldoutSettings {
         static let cpuHeadsUp = "alerts.cpuHeadsUp"
         static let sessionDone = "flash.sessionDone"
         static let buildResult = "flash.buildResult"
+        static let customActions = "project.customActions"
+        static let didOnboard = "didOnboard"
     }
 
     static func registerDefaults() {
@@ -37,6 +39,8 @@ enum HoldoutSettings {
     static func deliveryKey(_ agent: String) -> String { "agent.\(agent).delivery" }
     static func hiddenKey(_ agent: String) -> String { "agent.\(agent).hidden" }
     static func promptKey(_ action: String) -> String { "prompt.\(action)" }
+    /// Whether a built-in Project button (Build, Commit) shows; on unless turned off.
+    static func builtInHiddenKey(_ action: String) -> String { "project.\(action).hidden" }
 
     static func delivery(for agent: String) -> Delivery {
         UserDefaults.standard.string(forKey: deliveryKey(agent)).flatMap(Delivery.init) ?? .automatic
@@ -50,6 +54,21 @@ enum HoldoutSettings {
     static func promptOverride(for action: String) -> String? {
         let text = UserDefaults.standard.string(forKey: promptKey(action))?.trimmingCharacters(in: .whitespacesAndNewlines)
         return text?.isEmpty == false ? text : nil
+    }
+
+    static func showsBuiltIn(_ action: String) -> Bool {
+        !UserDefaults.standard.bool(forKey: builtInHiddenKey(action))
+    }
+
+    /// The user's own Project buttons, in order, shown for every project.
+    static var customActions: [CustomAction] {
+        get {
+            guard let data = UserDefaults.standard.data(forKey: Key.customActions) else { return [] }
+            return (try? JSONDecoder().decode([CustomAction].self, from: data)) ?? []
+        }
+        set {
+            UserDefaults.standard.set(try? JSONEncoder().encode(newValue), forKey: Key.customActions)
+        }
     }
 
     static func isOn(_ key: String) -> Bool {

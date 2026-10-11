@@ -297,7 +297,12 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         Self.log.info("\(action.id, privacy: .public) for \(session.agentName, privacy: .public) \(session.id, privacy: .public), \(session.state.isWorking ? "working" : "idle", privacy: .public)")
 
         if hasBridge(session) {
-            write(["id": UUID().uuidString, "action": action.id], for: session)
+            // The mod words its own buttons; a custom one carries its prompt along.
+            var command: [String: Any] = ["id": UUID().uuidString, "action": action.id]
+            if action.isCustom, let prompt = action.prompt(project: feed.project, repo: feed.repo) {
+                command["prompt"] = prompt
+            }
+            write(command, for: session)
             focus(session)
             return
         }

@@ -64,47 +64,33 @@ struct IconPreview: View {
     }
 }
 
-/// A mock of the Touch Bar with Holdout's strip open, cycling through the icon's states.
+/// A mock of the Touch Bar with Holdout's strip open and the Control Strip icon playing `pulse`.
 struct TouchBarPreview: View {
-    private static let states: [(pulse: IconPulse, label: String)] = [
-        (.idle, "Idle"),
-        (.working, "A session is working"),
-        (.waiting, "A session needs you"),
-        (.done(at: 0), "A session finished"),
-        (.done(at: 0, symbol: "hammer.fill"), "Build succeeded"),
-        (.headsUp(at: 0, symbol: "cpu"), "A process is hogging the CPU"),
-        (.alert, "Memory is critical"),
-    ]
-
-    @State private var index = 0
-    private let timer = Timer.publish(every: 4, on: .main, in: .common).autoconnect()
+    let pulse: IconPulse
+    /// Which tab shows as selected.
+    var tab = "terminal"
 
     var body: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 8) {
-                ForEach(["terminal", "iphone", "hammer", "memorychip"], id: \.self) { symbol in
-                    Image(systemName: symbol)
-                        .font(.system(size: 14))
-                        .frame(width: 44, height: 30)
-                        .background(Color.white.opacity(symbol == "terminal" ? 0.22 : 0.12), in: RoundedRectangle(cornerRadius: 6))
-                        .foregroundStyle(.white)
-                }
-                Spacer(minLength: 0)
-                IconPreview(pulse: Self.states[index].pulse)
-                    .id(index)
+        HStack(spacing: 8) {
+            ForEach(["terminal", "iphone", "hammer", "memorychip"], id: \.self) { symbol in
+                Image(systemName: symbol)
+                    .font(.system(size: 14))
+                    .frame(width: 44, height: 30)
+                    .background(Color.white.opacity(symbol == tab ? 0.24 : 0.12), in: RoundedRectangle(cornerRadius: 6))
+                    .foregroundStyle(.white)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(.black, in: RoundedRectangle(cornerRadius: 10))
-
-            Text(Self.states[index].label)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .contentTransition(.opacity)
+            Spacer(minLength: 12)
+            IconPreview(pulse: pulse)
+                .id(pulse.previewID)
         }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(.black, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .frame(maxWidth: .infinity)
-        .onReceive(timer) { _ in
-            withAnimation { index = (index + 1) % Self.states.count }
-        }
     }
+}
+
+private extension IconPulse {
+    /// Restarts the preview's timeline when the state changes.
+    var previewID: String { "\(self)" }
 }
