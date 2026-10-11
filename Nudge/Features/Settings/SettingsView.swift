@@ -25,11 +25,22 @@ enum SettingsPane: String, CaseIterable, Identifiable {
 
     var symbol: String {
         switch self {
-        case .general: "gearshape"
-        case .agents: "terminal"
-        case .buttons: "square.grid.2x2"
-        case .statusLight: "light.beacon.max"
-        case .about: "info.circle"
+        case .general: "gearshape.fill"
+        case .agents: "terminal.fill"
+        case .buttons: "square.grid.2x2.fill"
+        case .statusLight: "light.beacon.max.fill"
+        case .about: "info"
+        }
+    }
+
+    /// The color of the pane's icon tile, like System Settings' sidebar.
+    var tint: Color {
+        switch self {
+        case .general: .gray
+        case .agents: .indigo
+        case .buttons: .blue
+        case .statusLight: .orange
+        case .about: .teal
         }
     }
 
@@ -62,8 +73,12 @@ struct SettingsView: View {
     var body: some View {
         NavigationSplitView {
             List(panes, selection: $pane) { pane in
-                Label(pane.title, systemImage: pane.symbol)
-                    .tag(pane)
+                Label {
+                    Text(pane.title)
+                } icon: {
+                    PaneIcon(pane: pane)
+                }
+                .tag(pane)
             }
             .searchable(text: $search, placement: .sidebar)
             // The sidebar toggle stays: a toolbar item is what lets the sidebar run the full

@@ -7,6 +7,26 @@ import AppKit
 import SwiftUI
 
 /// The top of each pane, the way System Settings opens a pane: symbol, title, one sentence.
+/// A pane's symbol in white on a tile of its color, with a hairline edge, as in System Settings.
+struct PaneIcon: View {
+    let pane: SettingsPane
+    var size: CGFloat = 22
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: size * 0.27, style: .continuous)
+        shape
+            .fill(pane.tint.gradient)
+            .overlay(shape.strokeBorder(.white.opacity(0.18), lineWidth: 0.5))
+            .overlay {
+                Image(systemName: pane.symbol)
+                    .font(.system(size: size * 0.55, weight: .semibold))
+                    .foregroundStyle(.white)
+            }
+            .frame(width: size, height: size)
+            .accessibilityHidden(true)
+    }
+}
+
 struct PaneHeader<Accessory: View>: View {
     let pane: SettingsPane
     let text: String
@@ -14,11 +34,7 @@ struct PaneHeader<Accessory: View>: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            Image(systemName: pane.symbol)
-                .font(.system(size: 40))
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(.tint)
-                .frame(height: 52)
+            PaneIcon(pane: pane, size: 52)
             Text(pane.title).font(.title2.weight(.semibold))
             Text(text)
                 .multilineTextAlignment(.center)
