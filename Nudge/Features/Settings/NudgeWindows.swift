@@ -90,6 +90,9 @@ enum NudgeWindows {
         window.titleVisibility = .hidden
         window.isMovableByWindowBackground = true
         window.title = "Welcome to Nudge"
+        // The guide is black and cinematic in light mode too.
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.backgroundColor = .black
         window.isReleasedWhenClosed = false
         window.delegate = delegate
         return window

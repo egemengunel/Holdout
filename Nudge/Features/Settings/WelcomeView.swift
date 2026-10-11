@@ -6,7 +6,8 @@
 import SwiftUI
 
 /// The first-run guide: pick your agents, finish each one's setup, choose some Project buttons.
-/// Everything here is also in Settings; this just walks through it in order.
+/// Everything here is also in Settings; this just walks through it in order. It's black and
+/// cinematic: the first page plays the film of the Touch Bar, the others open on a still from it.
 struct WelcomeView: View {
     private enum Page: Int, CaseIterable {
         case hello, agents, setup, buttons, done
@@ -36,7 +37,9 @@ struct WelcomeView: View {
 
             footer
         }
-        .frame(width: 640, height: 580)
+        .frame(width: 720, height: 640)
+        .background(Color.black.ignoresSafeArea())
+        .environment(\.colorScheme, .dark)
         .task {
             await model.reload()
             chosenAgents = Set(AgentInstaller.Agent.allCases.filter { $0.isPresent })
@@ -46,28 +49,28 @@ struct WelcomeView: View {
     // MARK: Pages
 
     private var hello: some View {
-        VStack(spacing: 18) {
-            Spacer(minLength: 0)
-            Image(nsImage: NSApp.applicationIconImage)
-                .resizable()
-                .frame(width: 104, height: 104)
-                .shadow(color: .black.opacity(0.18), radius: 10, y: 5)
-            VStack(spacing: 8) {
-                Text("Welcome to Nudge").font(.largeTitle.weight(.semibold))
-                Text("Your coding agents, builds and Mac, on the Touch Bar.\nA status light tells you when an agent needs you, so you can look away.")
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
+        VStack(spacing: 0) {
+            VStack(spacing: 14) {
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .frame(width: 72, height: 72)
+                VStack(spacing: 8) {
+                    Text("Welcome to Nudge").font(.largeTitle.weight(.semibold))
+                    Text("Your coding agents, builds and Mac, on the Touch Bar.\nA status light tells you when an agent needs you, so you can look away.")
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.secondary)
+                }
             }
-            CyclingPreview()
-                .frame(maxWidth: 460)
-                .padding(.top, 8)
+            .padding(.top, 44)
+            .padding(.horizontal, 48)
+            Spacer(minLength: 0)
+            CinematicFilm(name: "WelcomeFilm")
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 48)
     }
 
     private var agents: some View {
-        page(title: "Which agents do you use?", subtitle: "Nudge adds a small hook to each one's config, so it can see when sessions work, wait and finish. Nothing leaves your Mac.") {
+        page(still: "WelcomeAgents", title: "Which agents do you use?", subtitle: "Nudge adds a small hook to each one's config, so it can see when sessions work, wait and finish. Nothing leaves your Mac.") {
             VStack(spacing: 0) {
                 ForEach(AgentInstaller.Agent.allCases) { agent in
                     let status = model.status(agent)
@@ -106,7 +109,7 @@ struct WelcomeView: View {
 
     private var setup: some View {
         let agents = AgentInstaller.Agent.allCases.filter { model.status($0) != .notConnected || model.busy.contains($0) }
-        return page(title: "Finish setting up", subtitle: agents.isEmpty
+        return page(still: "WelcomeSetup", title: "Finish setting up", subtitle: agents.isEmpty
                     ? "No agents are connected yet. You can connect them any time in Settings › Agents."
                     : "A few agents need one more thing before Nudge can see them.") {
             ScrollView {
@@ -144,7 +147,7 @@ struct WelcomeView: View {
     }
 
     private var buttons: some View {
-        page(title: "Pick your Project buttons", subtitle: "The Project tab has buttons that send a prompt to the agent you're working with. Build and Commit are built in; add any of these too. You can edit them or make your own in Settings › Buttons.") {
+        page(still: "WelcomeButtons", title: "Pick your Project buttons", subtitle: "The Project tab has buttons that send a prompt to the agent you're working with. Build and Commit are built in; add any of these too. You can edit them or make your own in Settings › Buttons.") {
             VStack(spacing: 14) {
                 TouchBarButtonsPreview(buttons: [("Build", "hammer"), ("Commit", "checkmark.circle")]
                     + CustomAction.presets.filter { chosenButtons.contains($0.title) }.map { ($0.title, $0.symbol) })
@@ -166,32 +169,38 @@ struct WelcomeView: View {
     }
 
     private var done: some View {
-        VStack(spacing: 18) {
-            Spacer(minLength: 0)
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 56))
-                .foregroundStyle(.green)
-            VStack(spacing: 8) {
+        VStack(spacing: 0) {
+            CinematicStill(name: "WelcomeDone")
+            VStack(spacing: 14) {
                 Text("You're all set").font(.largeTitle.weight(.semibold))
                 Text("Tap the hand in the Control Strip, at the right end of the Touch Bar, to open Nudge. Settings live in the menu bar under the same hand.")
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
-                    .frame(maxWidth: 440)
+                    .frame(maxWidth: 460)
+                Toggle("Open Nudge at login", isOn: $opensAtLogin)
+                    .onChange(of: opensAtLogin) { _, value in
+                        NudgeSettings.opensAtLogin = value
+                        opensAtLogin = NudgeSettings.opensAtLogin
+                    }
+                    .padding(.top, 4)
             }
-            TouchBarPreview(pulse: .idle)
-                .frame(maxWidth: 460)
-            Toggle("Open Nudge at login", isOn: $opensAtLogin)
-                .onChange(of: opensAtLogin) { _, value in
-                    NudgeSettings.opensAtLogin = value
-                    opensAtLogin = NudgeSettings.opensAtLogin
-                }
-                .padding(.top, 6)
+            .padding(.top, -24)
+            .padding(.horizontal, 48)
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 48)
+        .padding(.top, 28)
     }
 
-    private func page<Content: View>(title: String, subtitle: String, @ViewBuilder content: () -> Content) -> some View {
+    /// A step page: a still from the film across the top, dissolving into the title.
+    private func page<Content: View>(still: String, title: String, subtitle: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            CinematicStill(name: still)
+            stepContent(title: title, subtitle: subtitle, content: content)
+                .padding(.top, -44)
+        }
+    }
+
+    private func stepContent<Content: View>(title: String, subtitle: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(title).font(.title.weight(.semibold))
@@ -202,7 +211,6 @@ struct WelcomeView: View {
             content()
         }
         .padding(.horizontal, 40)
-        .padding(.top, 44)
     }
 
     // MARK: Footer
@@ -230,7 +238,6 @@ struct WelcomeView: View {
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 18)
-        .overlay(alignment: .top) { Divider() }
     }
 
     private var toConnect: [AgentInstaller.Agent] {
@@ -309,34 +316,5 @@ private struct PresetCard: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-    }
-}
-
-/// The strip mock cycling through the status light's states, with a caption.
-private struct CyclingPreview: View {
-    private static let states: [(pulse: IconPulse, label: String)] = [
-        (.working, "Agents are working"),
-        (.waiting, "A session needs you"),
-        (.done(at: 0), "A session finished"),
-        (.done(at: 0, symbol: "hammer.fill"), "Build succeeded"),
-        (.alert, "Memory is critical"),
-    ]
-
-    @State private var index = 0
-
-    var body: some View {
-        VStack(spacing: 10) {
-            TouchBarPreview(pulse: Self.states[index].pulse)
-            Text(Self.states[index].label)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .contentTransition(.opacity)
-        }
-        .task {
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(3.5))
-                withAnimation { index = (index + 1) % Self.states.count }
-            }
-        }
     }
 }
