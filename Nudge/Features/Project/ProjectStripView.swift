@@ -123,10 +123,12 @@ final class ProjectStripView: NSView {
             let ahead = feed.ship.flatMap { $0.ahead > 0 ? "\($0.ahead) ahead" : nil }
             let detail = [feed.project?.branch ?? feed.repo?.branch, ahead].compactMap { $0 }.joined(separator: " · ")
             views.append(pill(symbol: "arrow.triangle.branch", tint: .systemPurple, title: name, detail: detail))
-            views += news(xcodeBuild: xcodeBuild, feed: feed, now: now)
-            if let control = actionsControl(feed) {
+            // The buttons come right after the project: the strip shows only ~460 pt beyond
+            // the tabs, and what overflows is reached by swiping, so it should be the news.
+            if let control = actionsControl(feed, after: views[0]) {
                 views.append(control)
             }
+            views += news(xcodeBuild: xcodeBuild, feed: feed, now: now)
             if !noteLabel.stringValue.isEmpty {
                 views.append(noteLabel)
             }
@@ -194,7 +196,10 @@ final class ProjectStripView: NSView {
         return pill
     }
 
-    private func actionsControl(_ feed: ProjectFeed) -> NSSegmentedControl? {
+    /// What the strip shows beyond the tabs, which the buttons must fit in to all be visible.
+    private static let visibleWidth: CGFloat = 460
+
+    private func actionsControl(_ feed: ProjectFeed, after first: NSView) -> NSSegmentedControl? {
         if let offered = feed.actions, !offered.isEmpty {
             actions = offered.map { Action(id: $0.id, title: $0.title, symbol: $0.symbol) }
         } else {
@@ -208,6 +213,15 @@ final class ProjectStripView: NSView {
             actionControl.setLabel(action.title, forSegment: segment)
             actionControl.setImage(NSImage(systemSymbolName: action.symbol, accessibilityDescription: nil), forSegment: segment)
             actionControl.setWidth(0, forSegment: segment)
+        }
+        // Too many to fit beside the project chip: buttons keep their symbol and lose their
+        // label, from the last one back, until everything is on screen.
+        let room = Self.visibleWidth - first.fittingSize.width - stack.spacing
+        var segment = actions.count - 1
+        while actionControl.fittingSize.width > room, segment >= 0 {
+            actionControl.setLabel("", forSegment: segment)
+            actionControl.setWidth(42, forSegment: segment)
+            segment -= 1
         }
         return actionControl
     }
