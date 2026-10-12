@@ -252,7 +252,8 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
             let feed = currentFeed
             // With a session open, its own project's Xcode build; otherwise the latest of any.
             let xcodeBuild = (feed?.project?.name ?? feed?.repo?.name).map { builds.latest(project: $0) } ?? builds.latest
-            projectView.update(xcodeBuild: xcodeBuild, feed: feed)
+            let agent = feed.flatMap { feed in sessions.sessions.first { $0.id == feed.session } }?.agent
+            projectView.update(xcodeBuild: xcodeBuild, feed: feed, claude: (agent ?? "claude") == "claude")
         }
         if isPresented && tab == .mac {
             macAlertsSeenUntil = Date.now.timeIntervalSince1970

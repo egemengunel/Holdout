@@ -77,6 +77,7 @@ final class ProjectStripView: NSView {
     private var noteResetTask: Task<Void, Never>?
     private var build: XcodeBuild?
     private var actions: [Action] = []
+    private var showsModButtons = false
     /// [ Build | Commit ] as one control, like the tabs and the Sim stepper.
     private lazy var actionControl = NSSegmentedControl(labels: [], trackingMode: .momentary, target: self, action: #selector(runAction))
 
@@ -115,7 +116,9 @@ final class ProjectStripView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
-    func update(xcodeBuild: XcodeBuild?, feed: ProjectFeed?, now: Date = .now) {
+    /// `claude`: whether the session is Claude Code's, the only agent that runs mods' commands.
+    func update(xcodeBuild: XcodeBuild?, feed: ProjectFeed?, claude: Bool = false, now: Date = .now) {
+        showsModButtons = claude
         build = xcodeBuild
         var views: [NSView] = []
 
@@ -226,7 +229,7 @@ final class ProjectStripView: NSView {
             actions = (feed.project != nil ? [.build] : []) + (feed.repo != nil ? [.commit] : [])
             actions = actions.filter { NudgeSettings.showsBuiltIn($0.id) }
         }
-        actions += NudgeSettings.customActions.map { Action($0) }
+        actions += NudgeSettings.customActions.filter { $0.mod == nil || showsModButtons }.map { Action($0) }
         guard !actions.isEmpty else { return nil }
         actionControl.segmentCount = actions.count
         for (segment, action) in actions.enumerated() {
