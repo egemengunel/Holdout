@@ -1,0 +1,317 @@
+//
+//  ProjectStripView.swift
+//  Nudge
+//
+
+import AppKit
+
+/// The Project tab: which project and branch you're in, news only when there is some
+/// (a build result, a TestFlight ship), and the Build and Commit actions plus the user's own.
+final class ProjectStripView: NSView {
+    /// A Project button. Build and Commit are built in; a feed can offer others by id, which
+    /// only its own source (a Claude Code plugin) knows how to run.
+    struct Action: Hashable {
+        let id: String
+        let title: String
+        let symbol: String
+
+        static let build = Action(id: "build", title: "Build", symbol: "hammer")
+        static let commit = Action(id: "commit", title: "Commit", symbol: "checkmark.circle")
+
+        /// The built-in wording as one template, shown in Settings; {project}, {root} and {repo}
+        /// stand for the current project.
+        var defaultTemplate: String {
+            switch id {
+            case "build": "Build the Xcode project in {root} (through the Xcode MCP if you have it, otherwise xcodebuild), then list its warnings. If it fails, fix the errors and build again until it is clean. Report the warnings at the end."
+            default: "In {root}, review the uncommitted changes for bugs and leftovers, then propose an atomic commit grouping with messages. Do not commit yet: wait for my approval in my next message."
+            }
+        }
+
+        init(id: String, title: String, symbol: String) {
+            self.id = id
+            self.title = title
+            self.symbol = symbol
+        }
+
+        init(_ custom: CustomAction) {
+            self.init(id: custom.actionID, title: custom.title, symbol: custom.symbol)
+        }
+
+        /// One the user made in Settings, which Nudge words itself whoever runs the session.
+        var isCustom: Bool { id.hasPrefix(CustomAction.prefix) }
+
+        /// The prompt a built-in or custom button sends; nil for feed-defined buttons.
+        func prompt(project: ProjectFeed.Project?, repo: ProjectFeed.Repo?) -> String? {
+            if isCustom {
+                let custom = NudgeSettings.customActions.first { $0.actionID == id }
+                return custom.flatMap { CustomAction.fill($0.prompt, project: project, repo: repo) }
+            }
+            guard id == "build" || id == "commit" else { return nil }
+            if let custom = NudgeSettings.promptOverride(for: id) {
+                return CustomAction.fill(custom, project: project, repo: repo)
+            }
+            let lines: [String]? = id == "build"
+                ? project.map { p in [
+                    "nudge: the user pressed Build on the Touch Bar for \(p.name).",
+                    "Build the Xcode project in \(p.root ?? p.name) (through the Xcode MCP if you have it, otherwise xcodebuild), then list its warnings.",
+                    "If it fails, fix the errors and build again until it is clean. Report the warnings at the end.",
+                ] }
+                : repo.map { r in [
+                    "nudge: the user pressed Review & commit on the Touch Bar for \(r.name).",
+                    "In \(r.root ?? r.name), review the uncommitted changes for bugs and leftovers, then propose an atomic commit grouping with messages.",
+                    "Do not commit yet: wait for the user to approve the grouping in their next message.",
+                ] }
+            return lines?.joined(separator: "\n\n")
+        }
+    }
+
+    var onCommand: ((Action) -> Void)?
+
+    private static let failedBezel = NSColor(srgbRed: 0.42, green: 0.08, blue: 0.08, alpha: 1)
+
+    private let stack = NSStackView()
+    private let scrollView = NSScrollView()
+    private let emptyLabel = NSTextField(labelWithString: "No builds yet")
+    /// Says where a button's prompt went when it couldn't go straight into the session.
+    private let noteLabel = NSTextField(labelWithString: "")
+    private var noteResetTask: Task<Void, Never>?
+    private var build: XcodeBuild?
+    private var actions: [Action] = []
+    /// [ Build | Commit ] as one control, like the tabs and the Sim stepper.
+    private lazy var actionControl = NSSegmentedControl(labels: [], trackingMode: .momentary, target: self, action: #selector(runAction))
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+
+        stack.orientation = .horizontal
+        stack.spacing = 6
+        stack.translatesAutoresizingMaskIntoConstraints = false
+
+        scrollView.drawsBackground = false
+        scrollView.hasHorizontalScroller = false
+        scrollView.hasVerticalScroller = false
+        scrollView.documentView = stack
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+
+        emptyLabel.textColor = .secondaryLabelColor
+        emptyLabel.translatesAutoresizingMaskIntoConstraints = false
+        noteLabel.textColor = .secondaryLabelColor
+
+        addSubview(scrollView)
+        addSubview(emptyLabel)
+        NSLayoutConstraint.activate([
+            scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            scrollView.topAnchor.constraint(equalTo: topAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            stack.leadingAnchor.constraint(equalTo: scrollView.contentView.leadingAnchor),
+            stack.topAnchor.constraint(equalTo: scrollView.contentView.topAnchor),
+            stack.bottomAnchor.constraint(equalTo: scrollView.contentView.bottomAnchor),
+            emptyLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            emptyLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    func update(xcodeBuild: XcodeBuild?, feed: ProjectFeed?, now: Date = .now) {
+        build = xcodeBuild
+        var views: [NSView] = []
+
+        if let feed, let name = feed.project?.name ?? feed.repo?.name {
+            let ahead = feed.ship.flatMap { $0.ahead > 0 ? "\($0.ahead) ahead" : nil }
+            let detail = [feed.project?.branch ?? feed.repo?.branch, ahead].compactMap { $0 }.joined(separator: " · ")
+            views.append(pill(symbol: "arrow.triangle.branch", tint: .systemPurple, title: name, detail: detail))
+            // Only ~460 pt of the strip shows; what overflows takes a swipe. So the project, then
+            // any failure, then the buttons (squeezed to fit) and where a press went; the rest of
+            // the news last.
+            var news = news(xcodeBuild: xcodeBuild, feed: feed, now: now)
+            var control = actionsControl(feed, after: views + news.filter(Self.isFailure))
+            // A failure's first error line can take the whole strip; then it's just "2 errors".
+            if let shown = control, news.contains(where: Self.isFailure),
+               shown.fittingSize.width > room(after: views + news.filter(Self.isFailure)) {
+                news = self.news(xcodeBuild: xcodeBuild, feed: feed, now: now, brief: true)
+                control = actionsControl(feed, after: views + news.filter(Self.isFailure))
+            }
+            views += news.filter(Self.isFailure)
+            if let control {
+                views.append(control)
+            }
+            if !noteLabel.stringValue.isEmpty {
+                views.append(noteLabel)
+            }
+            views += news.filter { !Self.isFailure($0) }
+        } else if let xcodeBuild {
+            // No Claude session in a project: just Xcode's latest build, named.
+            views.append(buildPill(xcodeBuild, named: true, now: now))
+        }
+
+        emptyLabel.isHidden = !views.isEmpty
+        stack.setViews(views, in: .leading)
+    }
+
+    /// Only what's worth a glance: the newer of Xcode's and Claude's build, a ship in flight.
+    /// `brief` leaves a failure's error line out.
+    private func news(xcodeBuild: XcodeBuild?, feed: ProjectFeed, now: Date, brief: Bool = false) -> [NSView] {
+        var views: [NSView] = []
+        let claudeBuildIsNewer = feed.build != nil
+            && (feed.buildAt ?? 0) > (xcodeBuild?.finishedAt.timeIntervalSince1970 ?? 0)
+
+        if claudeBuildIsNewer, let claude = feed.build {
+            let pill = claude.isOk
+                ? pill(symbol: "checkmark.circle.fill", tint: .systemGreen, mark: .white, title: Self.ago(Date(timeIntervalSince1970: feed.buildAt ?? 0), now: now), detail: "")
+                : pill(symbol: "xmark.octagon.fill", tint: .systemRed, mark: .white, title: Self.plural(claude.errorCount, "error"), detail: brief ? "" : claude.firstError.map { Self.shorten($0) } ?? "")
+            pill.bezelColor = claude.isOk ? nil : Self.failedBezel
+            views.append(pill)
+        } else if let xcodeBuild {
+            views.append(buildPill(xcodeBuild, named: false, now: now))
+        }
+
+        if let ship = feed.ship, ship.phase != "idle" {
+            let failed = ship.phase == "failed" || ship.phase == "conflict"
+            views.append(pill(symbol: "arrow.up.circle", tint: failed ? .systemRed : .systemBlue, title: "TestFlight", detail: ship.note.map { Self.shorten($0) } ?? ship.phase))
+        }
+
+        for badge in feed.badges ?? [] {
+            let tint: NSColor = switch badge.tint {
+            case "red": .systemRed
+            case "orange": .systemOrange
+            case "green": .systemGreen
+            case "blue": .systemBlue
+            default: .secondaryLabelColor
+            }
+            views.append(pill(symbol: badge.symbol, tint: tint, title: badge.title, detail: badge.detail ?? ""))
+        }
+
+        return views
+    }
+
+    private static func isFailure(_ view: NSView) -> Bool {
+        (view as? NSButton)?.bezelColor == failedBezel
+    }
+
+    private func buildPill(_ build: XcodeBuild, named: Bool, now: Date) -> NSButton {
+        let warnings = build.warnings > 0 ? "\(build.warnings) ⚠︎" : nil
+        let pill = build.succeeded
+            ? pill(
+                symbol: "checkmark.circle.fill", tint: .systemGreen, mark: .white,
+                title: named ? build.project : Self.ago(build.finishedAt, now: now),
+                detail: [named ? "built \(Self.ago(build.finishedAt, now: now))" : nil, warnings].compactMap { $0 }.joined(separator: " · "),
+                action: #selector(openBuild)
+            )
+            : pill(
+                symbol: "xmark.octagon.fill", tint: .systemRed, mark: .white,
+                title: named ? build.project : Self.plural(build.errors, "error"),
+                detail: [named ? Self.plural(build.errors, "error") : nil, warnings].compactMap { $0 }.joined(separator: " · "),
+                action: #selector(openBuild)
+            )
+        pill.bezelColor = build.succeeded ? nil : Self.failedBezel
+        return pill
+    }
+
+    /// What the strip shows beyond the tabs, less its trailing fade (measured on the bar). The
+    /// scroll view itself runs on under the system's Control Strip, so its width can't tell.
+    private static let visibleWidth: CGFloat = 440
+
+    /// The width left on screen for the buttons after these views.
+    private func room(after leading: [NSView]) -> CGFloat {
+        Self.visibleWidth - leading.reduce(0) { $0 + $1.fittingSize.width + stack.spacing }
+    }
+
+    private func actionsControl(_ feed: ProjectFeed, after leading: [NSView]) -> NSSegmentedControl? {
+        if let offered = feed.actions, !offered.isEmpty {
+            actions = offered.map { Action(id: $0.id, title: $0.title, symbol: $0.symbol) }
+        } else {
+            actions = (feed.project != nil ? [.build] : []) + (feed.repo != nil ? [.commit] : [])
+            actions = actions.filter { NudgeSettings.showsBuiltIn($0.id) }
+        }
+        actions += NudgeSettings.customActions.map { Action($0) }
+        guard !actions.isEmpty else { return nil }
+        actionControl.segmentCount = actions.count
+        for (segment, action) in actions.enumerated() {
+            actionControl.setLabel(action.title, forSegment: segment)
+            actionControl.setImage(NSImage(systemSymbolName: action.symbol, accessibilityDescription: nil), forSegment: segment)
+            actionControl.setWidth(0, forSegment: segment)
+        }
+        // Too many to fit beside the project chip: buttons keep their symbol and lose their
+        // label, from the last one back, until everything is on screen.
+        let room = room(after: leading)
+        var segment = actions.count - 1
+        while actionControl.fittingSize.width > room, segment >= 0 {
+            actionControl.setLabel("", forSegment: segment)
+            actionControl.setWidth(42, forSegment: segment)
+            segment -= 1
+        }
+        return actionControl
+    }
+
+    /// Recording aid (`nudge-demo scroll start|end`): shows either end of an overflowing strip.
+    func scroll(toEnd: Bool) {
+        layoutSubtreeIfNeeded()
+        let x = toEnd ? max(0, stack.fittingSize.width - scrollView.contentView.bounds.width) : 0
+        scrollView.contentView.scroll(to: NSPoint(x: x, y: 0))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+    }
+
+    /// Shown after the actions for a few seconds; the owner's next update draws it.
+    func note(_ text: String, for seconds: Double = 4) {
+        noteLabel.stringValue = text
+        noteResetTask?.cancel()
+        noteResetTask = Task {
+            try? await Task.sleep(for: .seconds(seconds))
+            guard !Task.isCancelled else { return }
+            noteLabel.stringValue = ""
+        }
+    }
+
+    @objc private func runAction() {
+        guard actions.indices.contains(actionControl.selectedSegment) else { return }
+        onCommand?(actions[actionControl.selectedSegment])
+    }
+
+    @objc private func openBuild() {
+        guard let build else { return }
+        if let workspace = build.workspace, FileManager.default.fileExists(atPath: workspace.path) {
+            NSWorkspace.shared.open(workspace)
+        } else if let xcode = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.dt.Xcode") {
+            NSWorkspace.shared.openApplication(at: xcode, configuration: NSWorkspace.OpenConfiguration())
+        }
+    }
+
+    /// `mark` colors the inner glyph of two-layer symbols like `checkmark.circle.fill`.
+    private func pill(symbol: String, tint: NSColor, mark: NSColor? = nil, title: String, detail: String, action: Selector? = nil) -> NSButton {
+        let font = NSFont.systemFont(ofSize: 14)
+        let text = NSMutableAttributedString(string: title, attributes: [.foregroundColor: NSColor.labelColor, .font: font])
+        if !detail.isEmpty {
+            text.append(NSAttributedString(string: "  " + detail, attributes: [.foregroundColor: NSColor.secondaryLabelColor, .font: font]))
+        }
+
+        let button = NSButton(title: "", target: action == nil ? nil : self, action: action)
+        button.attributedTitle = text
+        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(paletteColors: mark.map { [$0, tint] } ?? [tint]))
+        button.imagePosition = .imageLeading
+        button.imageHugsTitle = true
+        return button
+    }
+
+    private static func ago(_ date: Date, now: Date) -> String {
+        let seconds = Int(now.timeIntervalSince(date))
+        return switch seconds {
+        case ..<60: "just now"
+        case ..<3600: "\(seconds / 60)m ago"
+        case ..<86_400: "\(seconds / 3600)h ago"
+        default: "\(seconds / 86_400)d ago"
+        }
+    }
+
+    private static func plural(_ count: Int, _ word: String) -> String {
+        "\(count) \(word)\(count == 1 ? "" : "s")"
+    }
+
+    private static func shorten(_ text: String) -> String {
+        let line = text.prefix { $0 != "\n" }
+        return line.count > 32 ? line.prefix(31) + "…" : String(line)
+    }
+}
