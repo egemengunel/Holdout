@@ -7,6 +7,9 @@ import type { IosProject, RepoInfo } from '../types'
 //
 // The other way, Nudge's Touch Bar buttons write commands/<session>.json; this picks a
 // command up once and submits the same prompts ios-dock's buttons do.
+//
+// It also lists every mod's slash commands in mods.json, so Nudge can offer any mod's commands
+// as Touch Bar buttons; a button's prompt `/<command>` is run as that command.
 
 const REPO = { plugin: 'ios-dock', key: 'repo' } as const
 const PROJECT = { plugin: 'ios-dock', key: 'project' } as const
@@ -36,13 +39,39 @@ const PROMPTS: Record<string, (project: IosProject | null, repo: RepoInfo | null
   ],
 }
 
-let stop: (() => void) | undefined
+let timer: { cancel: () => void } | undefined
 let lastWritten = ''
 /** null until the first sample, whose build (if any) predates this load and has no known age. */
 let lastBuild: string | null = null
 /** When ios-dock's build result last changed, so Nudge can tell it from a newer Xcode build. */
 let buildAt: number | null = null
 let lastCommand = ''
+let lastCatalog = ''
+const CATALOG_EVERY = 30
+
+/** The slash commands plugins add, by plugin, for Nudge to offer as buttons. */
+async function publishCatalog($: EngineInterface) {
+  const where = await folder($)
+  if (!where) return
+  const catalog: Record<string, { name: string; description: string }[]> = {}
+  for (const command of await $.command.list()) {
+    if (command.source !== 'plugin' || !command.plugin || command.plugin === 'nudge-bridge') continue
+    ;(catalog[command.plugin] ??= []).push({ name: command.name, description: command.description })
+  }
+  const body = JSON.stringify(catalog)
+  if (body === lastCatalog) return
+  lastCatalog = body
+  await $.fs.write(`${where.base}/mods.json`, body)
+}
+
+/** `/name args` when it names a command this session has; Nudge's mod buttons send these. */
+async function slashCommand($: EngineInterface, text: string) {
+  const match = /^\/(\S+)\s*([\s\S]*)$/.exec(text.trim())
+  if (!match) return null
+  const known = (await $.command.list()).some(listed => listed.name === match[1])
+  const [, command = '', args = ''] = match
+  return known ? { command, args } : null
+}
 
 async function folder($: EngineInterface): Promise<{ base: string; session: string } | null> {
   const [home, session] = await Promise.all([$.env.get('HOME'), $.session.id()])
@@ -105,17 +134,25 @@ async function takeCommand($: EngineInterface) {
   await $.fs.write(path, '')
 
   const [repo, project] = await Promise.all([$.state.get(REPO), $.state.get(PROJECT)])
-  // A button made in Nudge's Settings arrives already worded.
+  // A button made in Nudge's Settings arrives already worded; a mod's command runs as typed.
+  const slash = command.prompt ? await slashCommand($, command.prompt) : null
+  if (slash) {
+    $.clock.after(1, () => void $.command.run(slash).catch(() => {}))
+    return
+  }
   const lines = command.prompt ? [command.prompt] : PROMPTS[command.action ?? '']?.(project.value ?? null, repo.value ?? null)
   if (lines) $.clock.after(1, () => void $.prompt.submit({ text: lines.join('\n\n') }))
 }
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    stop?.()
-    stop = $.clock.every(INTERVAL_MS, () => {
+    timer?.cancel()
+    let tick = 0
+    $.clock.after(1, () => void publishCatalog($).catch(() => {}))
+    timer = $.clock.every(INTERVAL_MS, () => {
       void publish($).catch(() => {})
       void takeCommand($).catch(() => {})
+      if (++tick % CATALOG_EVERY === 0) void publishCatalog($).catch(() => {})
     })
     return next(e)
   })

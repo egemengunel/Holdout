@@ -11,7 +11,8 @@ struct ButtonsPane: View {
     @State private var editing: CustomAction?
     @State private var isNew = false
     @State private var editingBuiltIn: ProjectStripView.Action?
-    @State private var modButtons: [ProjectFeed.Control] = []
+    @State private var mods: [ClaudeMods.Mod] = []
+    @State private var modCommands: [ClaudeMods.Command] = []
     @AppStorage(NudgeSettings.builtInHiddenKey("build")) private var buildHidden = false
     @AppStorage(NudgeSettings.builtInHiddenKey("commit")) private var commitHidden = false
 
@@ -58,21 +59,30 @@ struct ButtonsPane: View {
             }
 
             Section {
-                if modButtons.isEmpty {
-                    Text("A Claude Code mod that reports to Nudge, like the bundled nudge-bridge, can offer its own buttons. They replace Build and Commit in its sessions, and your buttons still follow.")
+                if modCommands.isEmpty {
+                    Text(mods.isEmpty
+                         ? "Claude Code mods you install, in ~/.claude/mods or CLAUDE_CODE_PLUGIN_DIRS, show up here with their slash commands."
+                         : "\(mods.map(\.name).formatted(.list(type: .and))) \(mods.count == 1 ? "adds" : "add") no slash commands yet. They show up here once a Claude Code session has loaded them.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
-                    Button("Set Up nudge-bridge…") { NudgeWindows.showSettings(.agents) }
                 } else {
-                    ForEach(modButtons, id: \.id) { control in
-                        Label(control.title, systemImage: control.symbol)
+                    ForEach(modCommands) { command in
+                        Toggle(isOn: Binding(
+                            get: { custom.contains { $0.runs(command) } },
+                            set: { on in
+                                if on { custom.append(CustomAction(command)) } else { custom.removeAll { $0.runs(command) } }
+                            }
+                        )) {
+                            Text("/" + command.name)
+                            Text([command.mod, command.description].filter { !$0.isEmpty }.joined(separator: " · "))
+                        }
                     }
                 }
             } header: {
                 Text("From Claude Code mods")
             } footer: {
-                if !modButtons.isEmpty {
-                    Text("Offered by your mods in Claude Code sessions, in place of Build and Commit. Mods word these themselves.")
+                if !modCommands.isEmpty {
+                    Text("Each one runs its slash command in the chat, in Claude Code sessions. Turned on, it's one of your buttons above, to rename or reorder.")
                 }
             }
         }
@@ -83,7 +93,10 @@ struct ButtonsPane: View {
             let saved = NudgeSettings.customActions
             if saved != custom { custom = saved }
         }
-        .task { modButtons = ClaudeMods.reportedButtons }
+        .task {
+            mods = ClaudeMods.installed
+            modCommands = ClaudeMods.commands
+        }
         .sheet(item: $editing) { action in
             CustomActionEditor(action: action, isNew: isNew) { saved in
                 if let index = custom.firstIndex(where: { $0.id == saved.id }) {

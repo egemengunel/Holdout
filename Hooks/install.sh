@@ -44,10 +44,21 @@ register() {
                           + [{hooks: [{type: "command", command: $command, timeout: $timeout}]}]))'
 }
 
+# The nudge-bridge mod lets Project buttons run straight in the chat and carries the Project
+# state of the user's other mods (ios-dock and the like) to the Touch Bar. Claude Code loads
+# mods from CLAUDE_CODE_PLUGIN_DIRS, so it's added to the one in settings.json, keeping what's there.
+bridge="$hooks_dir/../Mods/nudge-bridge"
+
 install_claude() {
   echo "Claude Code"
   register "$HOME/.claude/settings.json" "$quoted" 5 \
     '["SessionStart","UserPromptSubmit","PreToolUse","PostToolUse","Notification","Stop","SessionEnd"]'
+  if [ -d "$bridge" ]; then
+    update "$HOME/.claude/settings.json" --arg bridge "$(cd "$bridge" && pwd)" '
+      .env //= {}
+      | .env.CLAUDE_CODE_PLUGIN_DIRS = (((.env.CLAUDE_CODE_PLUGIN_DIRS // "") | split(":")
+          | map(select(length > 0 and (test("(nudge|holdout)-bridge") | not)))) + [$bridge] | join(":"))'
+  fi
 }
 
 # Cursor also runs the hooks in ~/.claude/settings.json (Settings > Hooks > third-party
@@ -124,7 +135,11 @@ unregister() {
                                              else select(.command | mine | not) end)))
                  | with_entries(select(.value | length > 0)))
     else . end
-    | del(.nudge, .holdout)'
+    | del(.nudge, .holdout)
+    | if .env.CLAUDE_CODE_PLUGIN_DIRS then
+        .env.CLAUDE_CODE_PLUGIN_DIRS |= (split(":") | map(select(test("(nudge|holdout)-bridge") | not)) | join(":"))
+        | if .env.CLAUDE_CODE_PLUGIN_DIRS == "" then del(.env.CLAUDE_CODE_PLUGIN_DIRS) else . end
+      else . end'
 }
 
 remove_agent() {

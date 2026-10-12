@@ -18,6 +18,9 @@ struct WelcomeView: View {
     @State private var model = AgentConnections()
     @State private var chosenAgents: Set<AgentInstaller.Agent> = []
     @State private var chosenButtons: Set<String> = []
+    /// Slash commands of the Claude Code mods found on this Mac, and those picked as buttons.
+    @State private var modCommands: [ClaudeMods.Command] = []
+    @State private var chosenCommands: Set<String> = []
     @State private var opensAtLogin = NudgeSettings.opensAtLogin
 
     var body: some View {
@@ -43,6 +46,8 @@ struct WelcomeView: View {
         .task {
             await model.reload()
             chosenAgents = Set(AgentInstaller.Agent.allCases.filter { $0.isPresent })
+            let added = NudgeSettings.customActions
+            modCommands = ClaudeMods.commands.filter { command in !added.contains { $0.runs(command) } }
         }
     }
 
@@ -148,7 +153,10 @@ struct WelcomeView: View {
 
     private var buttons: some View {
         page(header: TouchBarStage(plate: .strip) { ProjectBar(buttons: chosenBarButtons) }, title: "Pick your Project buttons", subtitle: "The Project tab has buttons that send a prompt to the agent you're working with. Build and Commit are built in; add any of these too. You can edit them or make your own in Settings › Buttons.") {
-            VStack(spacing: 14) {
+            ScrollViewReader { proxy in
+            ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                Color.clear.frame(height: 0).id("top")
                 // An eager Grid, so the cards slide in with the page (a lazy one only fades in).
                 Grid(horizontalSpacing: 10, verticalSpacing: 10) {
                     ForEach(Array(stride(from: 0, to: CustomAction.presets.count, by: 2)), id: \.self) { start in
@@ -161,6 +169,34 @@ struct WelcomeView: View {
                         }
                     }
                 }
+                if !modCommands.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("From your Claude Code mods").font(.headline)
+                        Text("Run the command in the chat, in Claude Code sessions.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.top, 4)
+                    Grid(horizontalSpacing: 10, verticalSpacing: 10) {
+                        ForEach(Array(stride(from: 0, to: modCommands.count, by: 2)), id: \.self) { start in
+                            GridRow {
+                                ForEach(modCommands[start..<min(start + 2, modCommands.count)]) { command in
+                                    PresetCard(preset: CustomAction(command), detail: "\(command.mod) · \(command.description)",
+                                               isOn: chosenCommands.contains(command.id)) {
+                                        if chosenCommands.contains(command.id) { chosenCommands.remove(command.id) } else { chosenCommands.insert(command.id) }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            }
+            // Opens on the presets; something scrolls the last card into view as the page appears.
+            .task {
+                try? await Task.sleep(for: .milliseconds(150))
+                proxy.scrollTo("top", anchor: .top)
+            }
             }
         }
     }
@@ -193,6 +229,7 @@ struct WelcomeView: View {
     private var chosenBarButtons: [ProjectBar.Button] {
         [ProjectBar.Button(title: "Build", symbol: "hammer"), ProjectBar.Button(title: "Commit", symbol: "checkmark.circle")]
             + CustomAction.presets.filter { chosenButtons.contains($0.title) }.map { ProjectBar.Button(title: $0.title, symbol: $0.symbol) }
+            + modCommands.filter { chosenCommands.contains($0.id) }.map { CustomAction($0) }.map { ProjectBar.Button(title: $0.title, symbol: $0.symbol) }
     }
 
     /// A step page: a render across the top, dissolving into the title.
@@ -249,11 +286,12 @@ struct WelcomeView: View {
     }
 
     private var primaryTitle: String {
-        switch page {
+        let buttons = chosenButtons.count + chosenCommands.count
+        return switch page {
         case .hello: "Get Started"
         case .agents: toConnect.isEmpty ? "Continue" : "Connect \(toConnect.count == 1 ? toConnect[0].name : "\(toConnect.count) Agents")"
         case .setup: "Continue"
-        case .buttons: chosenButtons.isEmpty ? "Skip" : "Add \(chosenButtons.count == 1 ? "Button" : "\(chosenButtons.count) Buttons")"
+        case .buttons: buttons == 0 ? "Skip" : "Add \(buttons == 1 ? "Button" : "\(buttons) Buttons")"
         case .done: "Done"
         }
     }
@@ -271,6 +309,7 @@ struct WelcomeView: View {
                 action.id = UUID().uuidString
                 custom.append(action)
             }
+            custom += modCommands.filter { chosenCommands.contains($0.id) }.map { CustomAction($0) }
             NudgeSettings.customActions = custom
             go(1)
         case .done:
@@ -288,6 +327,8 @@ struct WelcomeView: View {
 
 private struct PresetCard: View {
     let preset: CustomAction
+    /// The line under the title; the prompt unless given.
+    var detail: String? = nil
     let isOn: Bool
     let toggle: () -> Void
 
@@ -300,7 +341,7 @@ private struct PresetCard: View {
                     .foregroundStyle(isOn ? .white : Color.accentColor)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(preset.title).font(.headline)
-                    Text(preset.prompt)
+                    Text(detail ?? preset.prompt)
                         .font(.caption)
                         .lineLimit(2)
                         .opacity(0.8)

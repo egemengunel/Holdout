@@ -13,11 +13,32 @@ struct CustomAction: Codable, Identifiable, Hashable {
     var symbol: String
     /// {project}, {root}, {repo} and {branch} stand for the current project.
     var prompt: String
+    /// The Claude Code mod whose slash command this runs (`prompt` is `/<command>`); shown only
+    /// for Claude Code sessions. Nil for the user's own prompts.
+    var mod: String? = nil
 
     /// The id its Touch Bar button carries, so it can't collide with a mod's ids.
     var actionID: String { Self.prefix + id }
 
     static let prefix = "custom."
+
+    /// A button that runs a mod's slash command.
+    init(_ command: ClaudeMods.Command) {
+        self.init(title: command.name.prefix(1).uppercased() + command.name.dropFirst(), symbol: "puzzlepiece.extension",
+                  prompt: ClaudeMods.prompt(for: command), mod: command.mod)
+    }
+
+    init(title: String, symbol: String, prompt: String, mod: String? = nil) {
+        self.title = title
+        self.symbol = symbol
+        self.prompt = prompt
+        self.mod = mod
+    }
+
+    /// Whether this is the button for that mod command.
+    func runs(_ command: ClaudeMods.Command) -> Bool {
+        mod == command.mod && prompt == ClaudeMods.prompt(for: command)
+    }
 
     /// Starting points offered in the welcome flow and the button editor.
     static let presets: [CustomAction] = [
