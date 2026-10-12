@@ -62,7 +62,8 @@ enum NudgeWindows {
     }
 
     static func showWelcome() {
-        let window = welcome ?? makeWelcome()
+        // A closed guide starts over at the first page; an open one just comes forward.
+        let window = welcome?.isVisible == true ? welcome! : makeWelcome()
         welcome = window
         bringForward(window)
     }
