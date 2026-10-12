@@ -20,7 +20,7 @@ private enum StripMetrics {
 }
 
 private func barImage(_ name: String) -> Image? {
-    Cinematic.url(name, "png").flatMap(NSImage.init(contentsOf:)).map { Image(nsImage: $0) }
+    Cinematic.image(name, "png").map { Image(nsImage: $0) }
 }
 
 /// The strip's scrolling area: clips, fades its trailing edge, and scrolls to keep the end of
@@ -157,7 +157,7 @@ struct CyclingBar: View {
             .task {
                 guard !reduceMotion else { return }
                 while !Task.isCancelled {
-                    let seconds = Self.duration(of: clips[index])
+                    let seconds = await Self.duration(of: clips[index])
                     try? await Task.sleep(for: .seconds(seconds))
                     guard !Task.isCancelled else { return }
                     withAnimation(.easeInOut(duration: 0.5)) { index = (index + 1) % clips.count }
@@ -165,11 +165,17 @@ struct CyclingBar: View {
             }
     }
 
-    private static func duration(of clip: String) -> Double {
-        guard let url = Cinematic.url(clip, "mp4") else { return 4 }
-        let seconds = AVURLAsset(url: url).duration.seconds
-        return seconds.isFinite && seconds > 1 ? min(seconds, 8) : 4
+    private static func duration(of clip: String) async -> Double {
+        if let known = durations[clip] { return known }
+        guard let url = Cinematic.url(clip, "mp4"),
+              let seconds = try? await AVURLAsset(url: url).load(.duration).seconds,
+              seconds.isFinite, seconds > 1
+        else { return 4 }
+        durations[clip] = min(seconds, 8)
+        return min(seconds, 8)
     }
+
+    private static var durations: [String: Double] = [:]
 }
 
 /// A recording of an ordinary app's bar with the status light playing over Nudge's icon, for

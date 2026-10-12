@@ -123,15 +123,25 @@ final class ProjectStripView: NSView {
             let ahead = feed.ship.flatMap { $0.ahead > 0 ? "\($0.ahead) ahead" : nil }
             let detail = [feed.project?.branch ?? feed.repo?.branch, ahead].compactMap { $0 }.joined(separator: " · ")
             views.append(pill(symbol: "arrow.triangle.branch", tint: .systemPurple, title: name, detail: detail))
-            // The buttons come right after the project: the strip shows only ~460 pt beyond
-            // the tabs, and what overflows is reached by swiping, so it should be the news.
-            if let control = actionsControl(feed, after: views[0]) {
+            // Only ~460 pt of the strip shows; what overflows takes a swipe. So the project, then
+            // any failure, then the buttons (squeezed to fit) and where a press went; the rest of
+            // the news last.
+            var news = news(xcodeBuild: xcodeBuild, feed: feed, now: now)
+            var control = actionsControl(feed, after: views + news.filter(Self.isFailure))
+            // A failure's first error line can take the whole strip; then it's just "2 errors".
+            if let shown = control, news.contains(where: Self.isFailure),
+               shown.fittingSize.width > room(after: views + news.filter(Self.isFailure)) {
+                news = self.news(xcodeBuild: xcodeBuild, feed: feed, now: now, brief: true)
+                control = actionsControl(feed, after: views + news.filter(Self.isFailure))
+            }
+            views += news.filter(Self.isFailure)
+            if let control {
                 views.append(control)
             }
-            views += news(xcodeBuild: xcodeBuild, feed: feed, now: now)
             if !noteLabel.stringValue.isEmpty {
                 views.append(noteLabel)
             }
+            views += news.filter { !Self.isFailure($0) }
         } else if let xcodeBuild {
             // No Claude session in a project: just Xcode's latest build, named.
             views.append(buildPill(xcodeBuild, named: true, now: now))
@@ -142,7 +152,8 @@ final class ProjectStripView: NSView {
     }
 
     /// Only what's worth a glance: the newer of Xcode's and Claude's build, a ship in flight.
-    private func news(xcodeBuild: XcodeBuild?, feed: ProjectFeed, now: Date) -> [NSView] {
+    /// `brief` leaves a failure's error line out.
+    private func news(xcodeBuild: XcodeBuild?, feed: ProjectFeed, now: Date, brief: Bool = false) -> [NSView] {
         var views: [NSView] = []
         let claudeBuildIsNewer = feed.build != nil
             && (feed.buildAt ?? 0) > (xcodeBuild?.finishedAt.timeIntervalSince1970 ?? 0)
@@ -150,7 +161,7 @@ final class ProjectStripView: NSView {
         if claudeBuildIsNewer, let claude = feed.build {
             let pill = claude.isOk
                 ? pill(symbol: "checkmark.circle.fill", tint: .systemGreen, mark: .white, title: Self.ago(Date(timeIntervalSince1970: feed.buildAt ?? 0), now: now), detail: "")
-                : pill(symbol: "xmark.octagon.fill", tint: .systemRed, mark: .white, title: Self.plural(claude.errorCount, "error"), detail: claude.firstError.map { Self.shorten($0) } ?? "")
+                : pill(symbol: "xmark.octagon.fill", tint: .systemRed, mark: .white, title: Self.plural(claude.errorCount, "error"), detail: brief ? "" : claude.firstError.map { Self.shorten($0) } ?? "")
             pill.bezelColor = claude.isOk ? nil : Self.failedBezel
             views.append(pill)
         } else if let xcodeBuild {
@@ -173,8 +184,11 @@ final class ProjectStripView: NSView {
             views.append(pill(symbol: badge.symbol, tint: tint, title: badge.title, detail: badge.detail ?? ""))
         }
 
-        // Problems first, right after the project chip.
-        return views.sorted { ($0 as? NSButton)?.bezelColor == Self.failedBezel && ($1 as? NSButton)?.bezelColor != Self.failedBezel }
+        return views
+    }
+
+    private static func isFailure(_ view: NSView) -> Bool {
+        (view as? NSButton)?.bezelColor == failedBezel
     }
 
     private func buildPill(_ build: XcodeBuild, named: Bool, now: Date) -> NSButton {
@@ -196,10 +210,16 @@ final class ProjectStripView: NSView {
         return pill
     }
 
-    /// What the strip shows beyond the tabs, which the buttons must fit in to all be visible.
-    private static let visibleWidth: CGFloat = 460
+    /// What the strip shows beyond the tabs, less its trailing fade (measured on the bar). The
+    /// scroll view itself runs on under the system's Control Strip, so its width can't tell.
+    private static let visibleWidth: CGFloat = 440
 
-    private func actionsControl(_ feed: ProjectFeed, after first: NSView) -> NSSegmentedControl? {
+    /// The width left on screen for the buttons after these views.
+    private func room(after leading: [NSView]) -> CGFloat {
+        Self.visibleWidth - leading.reduce(0) { $0 + $1.fittingSize.width + stack.spacing }
+    }
+
+    private func actionsControl(_ feed: ProjectFeed, after leading: [NSView]) -> NSSegmentedControl? {
         if let offered = feed.actions, !offered.isEmpty {
             actions = offered.map { Action(id: $0.id, title: $0.title, symbol: $0.symbol) }
         } else {
@@ -216,7 +236,7 @@ final class ProjectStripView: NSView {
         }
         // Too many to fit beside the project chip: buttons keep their symbol and lose their
         // label, from the last one back, until everything is on screen.
-        let room = Self.visibleWidth - first.fittingSize.width - stack.spacing
+        let room = room(after: leading)
         var segment = actions.count - 1
         while actionControl.fittingSize.width > room, segment >= 0 {
             actionControl.setLabel("", forSegment: segment)

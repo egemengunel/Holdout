@@ -10,10 +10,11 @@
 F=${0:A:h}; cd $F
 APP=${1:-$(ls -d ~/Library/Developer/Xcode/DerivedData/Nudge-*/Build/Products/Debug/Nudge.app | head -1)}
 DEMO=$APP/Contents/MacOS/Nudge
+grep -rqa NudgeDemoControl "$APP/Contents/MacOS" || { echo "$APP predates -NudgeDemoControl: rebuild it, or pass a newer Nudge.app" >&2; exit 1; }
 SESS=~/Library/Application\ Support/Nudge/sessions; ASIDE=$(mktemp -d)
 [[ -x nudge-demo ]] || swiftc -O nudge-demo.swift -o nudge-demo
 [[ -x wake ]] || swiftc -O wake.swift -o wake
-USER_APP=$(ps -axo command | grep -m1 "Nudge.app/Contents/MacOS/Nudge" | grep -v grep | sed 's|/Contents/MacOS/Nudge.*||')
+USER_APP=$(pgrep -lf "Nudge.app/Contents/MacOS/Nudge" | head -1 | sed -E 's|^[0-9]+ ||; s|/Contents/MacOS/Nudge.*||')
 
 cleanup() {
   [[ -n $DEMOPID ]] && kill $DEMOPID 2>/dev/null

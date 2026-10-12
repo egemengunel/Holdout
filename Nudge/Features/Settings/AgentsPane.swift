@@ -56,6 +56,9 @@ final class AgentConnections {
     var statuses: [AgentInstaller.Agent: AgentInstaller.Status] = [:]
     var busy: Set<AgentInstaller.Agent> = []
     var problem: String?
+    /// Installs run one at a time: they share the runtime folder, and Cursor's install reads
+    /// Claude Code's config to decide what to register.
+    @ObservationIgnored private var last: Task<Void, Never>?
 
     var connectable: [AgentInstaller.Agent] {
         AgentInstaller.Agent.allCases.filter { $0.isPresent && (statuses[$0] ?? .notConnected) == .notConnected }
@@ -76,7 +79,9 @@ final class AgentConnections {
     func change(_ agent: AgentInstaller.Agent, install: Bool) {
         busy.insert(agent)
         problem = nil
-        Task {
+        let previous = last
+        last = Task {
+            await previous?.value
             let failure = install ? await AgentInstaller.install(agent) : await AgentInstaller.remove(agent)
             if let failure { problem = "\(agent.name): \(failure)" }
             busy.remove(agent)
@@ -227,6 +232,8 @@ private struct AgentDetail: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .background(Color.black)
         .navigationTitle(agent.name)
     }
 }

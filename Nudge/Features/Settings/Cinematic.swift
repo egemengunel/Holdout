@@ -14,9 +14,16 @@ enum Cinematic {
         Bundle.main.url(forResource: name, withExtension: ext)
     }
 
-    static func image(_ name: String) -> NSImage? {
-        url(name, "jpg").flatMap(NSImage.init(contentsOf:))
+    static func image(_ name: String, _ ext: String = "jpg") -> NSImage? {
+        let key = name + "." + ext
+        if let cached = images[key] { return cached }
+        let image = url(name, ext).flatMap(NSImage.init(contentsOf:))
+        images[key] = image
+        return image
     }
+
+    /// Views ask on every render, so each file is read once.
+    private static var images: [String: NSImage] = [:]
 }
 
 /// A baked still, full width.

@@ -62,8 +62,8 @@ enum NudgeWindows {
     }
 
     static func showWelcome() {
-        // A closed guide starts over at the first page; an open one just comes forward.
-        let window = welcome?.isVisible == true ? welcome! : makeWelcome()
+        // A closed guide is let go (see `Delegate`), so it starts over at the first page.
+        let window = welcome ?? makeWelcome()
         welcome = window
         bringForward(window)
     }
@@ -123,8 +123,14 @@ enum NudgeWindows {
         func windowWillClose(_ notification: Notification) {
             MainActor.assumeIsolated {
                 let closing = notification.object as? NSWindow
-                if closing === NudgeWindows.welcome {
+                if let closing, closing === NudgeWindows.welcome {
                     UserDefaults.standard.set(true, forKey: NudgeSettings.Key.didOnboard)
+                    // Closing doesn't take views out of the window, so its videos would play on;
+                    // dropping the window's content stops them.
+                    DispatchQueue.main.async {
+                        closing.contentViewController = nil
+                        if NudgeWindows.welcome === closing { NudgeWindows.welcome = nil }
+                    }
                 }
                 let others = [NudgeWindows.settings, NudgeWindows.welcome].compactMap { $0 }
                     .filter { $0 !== closing && $0.isVisible }

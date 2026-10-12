@@ -172,12 +172,14 @@ enum Homography {
     }
 }
 
-/// A looping recording of the bar, with a soft bloom like the OLED's.
+/// A looping recording of the bar, with a soft bloom like the OLED's; held on its first frame
+/// under Reduce Motion.
 struct BarVideo: NSViewRepresentable {
     let name: String
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeNSView(context: Context) -> GlowingVideoView { GlowingVideoView(url: Cinematic.url(name, "mp4")) }
-    func updateNSView(_ view: GlowingVideoView, context: Context) {}
+    func updateNSView(_ view: GlowingVideoView, context: Context) { view.isStill = reduceMotion }
 }
 
 final class GlowingVideoView: NSView {
@@ -210,9 +212,17 @@ final class GlowingVideoView: NSView {
         glow.frame = bounds
     }
 
+    var isStill = false {
+        didSet { if isStill != oldValue { updatePlayback() } }
+    }
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if window == nil { player.pause() } else { player.play() }
+        updatePlayback()
+    }
+
+    private func updatePlayback() {
+        if window == nil || isStill { player.pause() } else { player.play() }
     }
 }
 

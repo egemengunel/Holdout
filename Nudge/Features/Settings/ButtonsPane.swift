@@ -78,6 +78,11 @@ struct ButtonsPane: View {
         }
         .formStyle(.grouped)
         .onChange(of: custom) { _, value in NudgeSettings.customActions = value }
+        // The welcome guide can add buttons while this is open.
+        .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
+            let saved = NudgeSettings.customActions
+            if saved != custom { custom = saved }
+        }
         .task { modButtons = ClaudeMods.reportedButtons }
         .sheet(item: $editing) { action in
             CustomActionEditor(action: action, isNew: isNew) { saved in
