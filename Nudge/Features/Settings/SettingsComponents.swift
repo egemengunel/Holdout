@@ -33,7 +33,8 @@ struct PaneHeader<Accessory: View>: View {
     @ViewBuilder var accessory: Accessory
 
     /// The accessory (a `TouchBarStage`) runs edge to edge on the black page, and the title
-    /// sits in its faded lower edge.
+    /// sits in its faded lower edge. Used as a section header: a section's rows sit on a
+    /// card, which would box the render in.
     var body: some View {
         VStack(spacing: 0) {
             accessory
@@ -41,6 +42,7 @@ struct PaneHeader<Accessory: View>: View {
                 PaneIcon(pane: pane, size: 44)
                 Text(pane.title).font(.title2.weight(.semibold))
                 Text(text)
+                    .font(.body)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -50,8 +52,8 @@ struct PaneHeader<Accessory: View>: View {
             .padding(.bottom, 8)
         }
         .frame(maxWidth: .infinity)
-        .listRowBackground(Color.clear)
-        .listRowInsets(EdgeInsets())
+        .foregroundStyle(.primary)
+        .textCase(nil)
     }
 }
 

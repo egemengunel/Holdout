@@ -153,7 +153,7 @@ private struct GeneralPane: View {
 
     var body: some View {
         Form {
-            Section {
+            Section {} footer: {
                 PaneHeader(pane: .general, text: "Nudge puts your coding agents, builds and Mac on the Touch Bar. Tap the hand in the Control Strip to open it.") {
                     TouchBarStage(plate: .bar, clip: "BarWorking")
                 }

@@ -22,7 +22,7 @@ struct ButtonsPane: View {
 
     var body: some View {
         Form {
-            Section {
+            Section {} footer: {
                 PaneHeader(pane: .buttons, text: "Buttons on the Touch Bar's Project tab. Each one sends a prompt to the agent you're working with, for whatever project it's in.") {
                     TouchBarStage(plate: .strip) {
                         ProjectBar(buttons: preview.map { ProjectBar.Button(title: $0.title, symbol: $0.symbol) })

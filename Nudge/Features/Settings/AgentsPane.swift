@@ -11,7 +11,7 @@ struct AgentsPane: View {
 
     var body: some View {
         Form {
-            Section {
+            Section {} footer: {
                 PaneHeader(pane: .agents, text: "Nudge listens to your coding agents through a small hook in each one's config. Nothing leaves your Mac.") {
                     TouchBarStage(plate: .strip) { AgentsArrivingBar() }
                 }

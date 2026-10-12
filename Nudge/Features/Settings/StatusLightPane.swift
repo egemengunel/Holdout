@@ -45,7 +45,7 @@ struct StatusLightPane: View {
 
     var body: some View {
         Form {
-            Section {
+            Section {} footer: {
                 PaneHeader(pane: .statusLight, text: "Nudge's icon in the Control Strip is a status light. Color says what happened; motion says how urgent. Click a signal to see it.") {
                     TouchBarStage(plate: .right) { Self.bar(for: selected, pulse: playing) }
                 }
