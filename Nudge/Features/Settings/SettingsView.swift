@@ -111,9 +111,7 @@ struct SettingsView: View {
             NavigationStack(path: $path) {
                 detail(pane ?? .general)
                     .navigationTitle((pane ?? .general).title)
-                    // Black, like the welcome guide, so the renders dissolve into the page.
-                    .scrollContentBackground(.hidden)
-                    .background(Color.black)
+                    .blackPane()
             }
         }
         .frame(minWidth: 640, minHeight: 440)
@@ -227,5 +225,22 @@ private struct AboutPane: View {
         }
         .padding(32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+extension View {
+    /// A Settings page on black, like the welcome guide, so the renders dissolve into it. The
+    /// title bar draws no band of its own (the hard edge macOS picks under a window title);
+    /// the black runs on under it and the content fades out beneath it.
+    @ViewBuilder
+    func blackPane() -> some View {
+        let page = scrollContentBackground(.hidden)
+            .background(Color.black.ignoresSafeArea())
+            .toolbarBackground(.hidden, for: .windowToolbar)
+        if #available(macOS 26, *) {
+            page.scrollEdgeEffectStyle(.soft, for: .top)
+        } else {
+            page
+        }
     }
 }
