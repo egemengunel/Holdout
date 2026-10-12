@@ -155,7 +155,7 @@ private struct GeneralPane: View {
         Form {
             Section {} footer: {
                 PaneHeader(pane: .general, text: "Nudge puts your coding agents, builds and Mac on the Touch Bar. Tap the hand in the Control Strip to open it.") {
-                    TouchBarStage(plate: .bar, clip: "BarWorking")
+                    TouchBarStage(plate: .bar) { CyclingBar() }
                 }
             }
 

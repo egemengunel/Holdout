@@ -3,6 +3,7 @@
 //  Nudge
 //
 
+import AVFoundation
 import SwiftUI
 
 // Bar content for `TouchBarStage`, laid out at the Touch Bar's size (1004 × 30 pt). The fixed
@@ -139,6 +140,35 @@ private struct ArrivingPills: View {
                 }
             }
         }
+    }
+}
+
+/// Recordings of the bar one after another, each played through once and dissolving into the next.
+struct CyclingBar: View {
+    var clips = ["BarWorking", "BarWaiting", "BarBuildSucceeded", "BarSessionDone", "BarBuildFailed", "BarIdle"]
+    @State private var index = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        BarVideo(name: clips[index])
+            .id(index)
+            .frame(width: TouchBarMetrics.size.width, height: TouchBarMetrics.size.height)
+            .transition(.opacity)
+            .task {
+                guard !reduceMotion else { return }
+                while !Task.isCancelled {
+                    let seconds = Self.duration(of: clips[index])
+                    try? await Task.sleep(for: .seconds(seconds))
+                    guard !Task.isCancelled else { return }
+                    withAnimation(.easeInOut(duration: 0.5)) { index = (index + 1) % clips.count }
+                }
+            }
+    }
+
+    private static func duration(of clip: String) -> Double {
+        guard let url = Cinematic.url(clip, "mp4") else { return 4 }
+        let seconds = AVURLAsset(url: url).duration.seconds
+        return seconds.isFinite && seconds > 1 ? min(seconds, 8) : 4
     }
 }
 
