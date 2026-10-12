@@ -299,9 +299,11 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
         Self.log.info("\(action.id, privacy: .public) for \(session.agentName, privacy: .public) \(session.id, privacy: .public), \(session.state.isWorking ? "working" : "idle", privacy: .public)")
 
         if hasBridge(session) {
-            // The mod words its own buttons; a custom one carries its prompt along.
+            // A mod words the buttons it offers; Nudge's own (custom ones, and Build and Commit
+            // when no mod offers any) carry their prompt along.
             var command: [String: Any] = ["id": UUID().uuidString, "action": action.id]
-            if action.isCustom, let prompt = action.prompt(project: feed.project, repo: feed.repo) {
+            let modOffers = feed.actions?.contains { $0.id == action.id } == true
+            if !modOffers, let prompt = action.prompt(project: feed.project, repo: feed.repo) {
                 command["prompt"] = prompt
             }
             write(command, for: session)

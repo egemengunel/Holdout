@@ -31,11 +31,6 @@ enum ClaudeMods {
 
     static var bridgeIsBundled: Bool { FileManager.default.fileExists(atPath: bridge.path) }
 
-    /// The line that loads the bridge into Claude Code, for a shell profile.
-    static var bridgeExport: String {
-        #"export CLAUDE_CODE_PLUGIN_DIRS="${CLAUDE_CODE_PLUGIN_DIRS:+$CLAUDE_CODE_PLUGIN_DIRS:}\#(bridge.path)""#
-    }
-
     /// Buttons that mods offered in feeds written in the last week, by title, with no repeats.
     static var reportedButtons: [ProjectFeed.Control] {
         let folder = AgentInstaller.support.appending(path: "feeds")

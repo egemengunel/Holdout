@@ -59,10 +59,10 @@ struct ButtonsPane: View {
 
             Section {
                 if modButtons.isEmpty {
-                    Text("A Claude Code mod that reports to Nudge, like the bundled nudge-bridge, can offer its own buttons. They replace Build and Commit in its sessions, and your buttons still follow.")
+                    Text("Connecting Claude Code loads the nudge-bridge mod, which brings buttons from mods like ios-dock to the Project tab. They replace Build and Commit in those sessions, and your buttons still follow.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
-                    Button("Set Up nudge-bridge…") { NudgeWindows.showSettings(.agents) }
+                    Button("Connect Claude Code…") { NudgeWindows.showSettings(.agents) }
                 } else {
                     ForEach(modButtons, id: \.id) { control in
                         Label(control.title, systemImage: control.symbol)

@@ -50,9 +50,8 @@ enum AgentGuide {
                     isDone: seen
                 ),
                 Step(
-                    title: "Optional: load the nudge-bridge mod",
-                    detail: "Without it, Project buttons copy their prompt for you to paste. With it, they run straight in the chat, and mods can add their own buttons. Add this line to your shell profile, then start a new session:",
-                    code: ClaudeMods.bridgeIsBundled ? ClaudeMods.bridgeExport : nil,
+                    title: "Your Claude Code mods show on the Touch Bar",
+                    detail: "Connecting also loads the nudge-bridge mod, so Project buttons run straight in the chat and mods like ios-dock bring their buttons and build status to the Project tab. It appears here once a new session has started.",
                     isDone: ClaudeMods.isReporting
                 ),
             ]
