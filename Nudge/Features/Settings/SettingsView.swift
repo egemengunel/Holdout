@@ -110,7 +110,8 @@ struct SettingsView: View {
         } detail: {
             NavigationStack(path: $path) {
                 detail(pane ?? .general)
-                    .navigationTitle((pane ?? .general).title)
+                    .navigationTitle("")
+                    .titleHidden()
                     .blackPane()
             }
         }
@@ -229,6 +230,16 @@ private struct AboutPane: View {
 }
 
 extension View {
+    /// No title in the title bar: every pane opens with its own header, so it would say it twice.
+    @ViewBuilder
+    func titleHidden() -> some View {
+        if #available(macOS 15, *) {
+            toolbar(removing: .title)
+        } else {
+            self
+        }
+    }
+
     /// A Settings page on black, like the welcome guide, so the renders dissolve into it. The
     /// title bar draws no band of its own (the hard edge macOS picks under a window title);
     /// the black runs on under it and the content fades out beneath it.
