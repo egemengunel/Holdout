@@ -80,6 +80,17 @@ final class ProjectStripView: NSView {
     private var showsModButtons = false
     /// [ Build | Commit ] as one control, like the tabs and the Sim stepper.
     private lazy var actionControl = NSSegmentedControl(labels: [], trackingMode: .momentary, target: self, action: #selector(runAction))
+    /// Sized off screen, so the real control is touched only when what it shows changes: the
+    /// strip refreshes every second and on every hook event, and reworking the control under a
+    /// finger cancels the tap.
+    private let probe = NSSegmentedControl(labels: [], trackingMode: .momentary, target: nil, action: nil)
+    private var shownSegments: [Segment] = []
+
+    private struct Segment: Equatable {
+        let label: String
+        let symbol: String
+        let width: CGFloat
+    }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -151,7 +162,24 @@ final class ProjectStripView: NSView {
         }
 
         emptyLabel.isHidden = !views.isEmpty
-        stack.setViews(views, in: .leading)
+        arrange(views)
+    }
+
+    /// Puts these views in the stack, leaving the ones already in place where they are (the
+    /// buttons above all, so a refresh mid-tap doesn't pull them out from under a finger).
+    private func arrange(_ views: [NSView]) {
+        for view in stack.arrangedSubviews where !views.contains(where: { $0 === view }) {
+            stack.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
+        for (index, view) in views.enumerated() {
+            let current = stack.arrangedSubviews
+            if index < current.count, current[index] === view { continue }
+            if current.contains(where: { $0 === view }) {
+                stack.removeArrangedSubview(view)
+            }
+            stack.insertArrangedSubview(view, at: index)
+        }
     }
 
     /// Only what's worth a glance: the newer of Xcode's and Claude's build, a ship in flight.
@@ -231,22 +259,31 @@ final class ProjectStripView: NSView {
         }
         actions += NudgeSettings.customActions.filter { $0.mod == nil || showsModButtons }.map { Action($0) }
         guard !actions.isEmpty else { return nil }
-        actionControl.segmentCount = actions.count
-        for (segment, action) in actions.enumerated() {
-            actionControl.setLabel(action.title, forSegment: segment)
-            actionControl.setImage(NSImage(systemSymbolName: action.symbol, accessibilityDescription: nil), forSegment: segment)
-            actionControl.setWidth(0, forSegment: segment)
-        }
+        var segments = actions.map { Segment(label: $0.title, symbol: $0.symbol, width: 0) }
         // Too many to fit beside the project chip: buttons keep their symbol and lose their
         // label, from the last one back, until everything is on screen.
         let room = room(after: leading)
-        var segment = actions.count - 1
-        while actionControl.fittingSize.width > room, segment >= 0 {
-            actionControl.setLabel("", forSegment: segment)
-            actionControl.setWidth(42, forSegment: segment)
+        var segment = segments.count - 1
+        while Self.configure(probe, segments).fittingSize.width > room, segment >= 0 {
+            segments[segment] = Segment(label: "", symbol: segments[segment].symbol, width: 42)
             segment -= 1
         }
+        if segments != shownSegments {
+            Self.configure(actionControl, segments)
+            shownSegments = segments
+        }
         return actionControl
+    }
+
+    @discardableResult
+    private static func configure(_ control: NSSegmentedControl, _ segments: [Segment]) -> NSSegmentedControl {
+        control.segmentCount = segments.count
+        for (index, segment) in segments.enumerated() {
+            control.setLabel(segment.label, forSegment: index)
+            control.setImage(NSImage(systemSymbolName: segment.symbol, accessibilityDescription: nil), forSegment: index)
+            control.setWidth(segment.width, forSegment: index)
+        }
+        return control
     }
 
     /// Recording aid (`nudge-demo scroll start|end`): shows either end of an overflowing strip.

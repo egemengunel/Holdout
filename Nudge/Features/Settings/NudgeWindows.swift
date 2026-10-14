@@ -85,11 +85,17 @@ enum NudgeWindows {
 
     private static func makeWelcome() -> NSWindow {
         let hosting = NSHostingController(rootView: WelcomeView())
-        hosting.sizingOptions = [.preferredContentSize]
+        // Sized here, not from SwiftUI: its size would add the title bar's inset, which the
+        // pages run under.
+        hosting.sizingOptions = []
         let window = NSWindow(contentViewController: hosting)
         window.styleMask = [.titled, .closable, .fullSizeContentView]
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
+        // An empty toolbar: on macOS 26 a window with one gets the system's larger corner
+        // radius, the same as Settings, rather than a plain titled window's.
+        window.toolbar = NSToolbar()
+        window.toolbarStyle = .unified
         window.isMovableByWindowBackground = true
         window.title = "Welcome to Nudge"
         // The guide is black and cinematic in light mode too.
@@ -97,6 +103,7 @@ enum NudgeWindows {
         window.backgroundColor = .black
         window.isReleasedWhenClosed = false
         window.delegate = delegate
+        window.setContentSize(WelcomeView.size)
         return window
     }
 
@@ -104,10 +111,6 @@ enum NudgeWindows {
     /// before activating, so activation never switches desktops.
     private static func bringForward(_ window: NSWindow) {
         window.collectionBehavior.insert(.moveToActiveSpace)
-        // SwiftUI sizes the window only after it shows; size it now so the centering holds.
-        if let content = window.contentViewController?.view, content.fittingSize.width > 0 {
-            window.setContentSize(content.fittingSize)
-        }
         let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main
         if let visible = screen?.visibleFrame {
             let size = window.frame.size

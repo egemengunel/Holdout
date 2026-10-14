@@ -23,24 +23,26 @@ struct WelcomeView: View {
     @State private var chosenCommands: Set<String> = []
     @State private var opensAtLogin = NudgeSettings.opensAtLogin
 
-    var body: some View {
-        VStack(spacing: 0) {
-            Group {
-                switch page {
-                case .hello: hello
-                case .agents: agents
-                case .setup: setup
-                case .buttons: buttons
-                case .done: done
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .opacity))
-            .id(page)
+    /// The window's content size; the pages run up under its (empty) title bar.
+    static let size = CGSize(width: 720, height: 668)
 
-            footer
+    var body: some View {
+        Group {
+            switch page {
+            case .hello: hello
+            case .agents: agents
+            case .setup: setup
+            case .buttons: buttons
+            case .done: done
+            }
         }
-        .frame(width: 720, height: 640)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .opacity))
+        .id(page)
+        .bottomBar { footer }
+        // Fills the window (sized in `NudgeWindows`), up under its empty title bar.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea(.container, edges: .top)
         .background(Color.black.ignoresSafeArea())
         .environment(\.colorScheme, .dark)
         .task {
@@ -107,8 +109,7 @@ struct WelcomeView: View {
                     if agent != AgentInstaller.Agent.allCases.last { Divider().padding(.leading, 60) }
                 }
             }
-            .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(.separator))
+            .guideCard()
         }
     }
 
@@ -138,8 +139,7 @@ struct WelcomeView: View {
                         }
                         .padding(14)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(.separator))
+                        .guideCard()
                     }
                     if let problem = model.problem {
                         Label(problem, systemImage: "exclamationmark.triangle.fill")
@@ -353,13 +353,27 @@ private struct PresetCard: View {
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(isOn ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.background.secondary))
-            )
-            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(.separator).opacity(isOn ? 0 : 1))
+            .guideCard(isOn ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.background.secondary))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+
+private extension View {
+    /// A card on the guide's black: the system's own box, so its corners are the native ones.
+    func guideCard(_ fill: AnyShapeStyle = AnyShapeStyle(.background.secondary)) -> some View {
+        GroupBox { self }
+            .backgroundStyle(fill)
+    }
+
+    /// The guide's buttons and page dots, in a bar along the bottom the pages scroll under.
+    @ViewBuilder
+    func bottomBar(@ViewBuilder _ bar: () -> some View) -> some View {
+        if #available(macOS 26, *) {
+            safeAreaBar(edge: .bottom, content: bar)
+        } else {
+            safeAreaInset(edge: .bottom, content: bar)
+        }
     }
 }

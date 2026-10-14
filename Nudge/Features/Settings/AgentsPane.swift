@@ -232,8 +232,7 @@ private struct AgentDetail: View {
             }
         }
         .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
-        .background(Color.black)
+        .blackPane()
         .navigationTitle(agent.name)
     }
 }
