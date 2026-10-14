@@ -51,6 +51,8 @@ struct PaneHeader<Accessory: View>: View {
             .padding(.top, Accessory.self == EmptyView.self ? 12 : -30)
             .padding(.bottom, 8)
         }
+        // The render's own black sky would sit under the empty title bar: start it higher.
+        .padding(.top, Accessory.self == EmptyView.self ? 0 : -44)
         .frame(maxWidth: .infinity)
         .foregroundStyle(.primary)
         .textCase(nil)

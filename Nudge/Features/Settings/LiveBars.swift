@@ -23,19 +23,14 @@ private func barImage(_ name: String) -> Image? {
     Cinematic.image(name, "png").map { Image(nsImage: $0) }
 }
 
-/// The strip's scrolling area: clips, fades its trailing edge, and scrolls to keep the end of
-/// its content in view, the way you'd swipe to your newest button.
+/// The strip's scrolling area: clips and fades its trailing edge, as the bar does.
 private struct StripContent<Content: View>: View {
     @ViewBuilder var content: Content
-    @State private var width: CGFloat = 0
 
     var body: some View {
-        let visible = StripMetrics.contentEnd - StripMetrics.contentStart
         content
             .fixedSize()
-            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
-            .offset(x: -max(0, width - visible + 6))
-            .frame(width: visible, height: 30, alignment: .leading)
+            .frame(width: StripMetrics.contentEnd - StripMetrics.contentStart, height: 30, alignment: .leading)
             .clipped()
             .mask {
                 HStack(spacing: 0) {
@@ -44,12 +39,12 @@ private struct StripContent<Content: View>: View {
                         .frame(width: StripMetrics.edgeFade)
                 }
             }
-            .animation(.snappy(duration: 0.45), value: width)
             .offset(x: StripMetrics.contentStart)
     }
 }
 
-/// The Project tab of a demo project, with these buttons after Build and Commit.
+/// The Project tab of a demo project, laid out as `ProjectStripView` does it: the project chip,
+/// then these buttons (Build and Commit included, if shown), squeezed to fit what the bar shows, then the last build.
 struct ProjectBar: View {
     struct Button: Hashable {
         let title: String
@@ -58,45 +53,82 @@ struct ProjectBar: View {
 
     let buttons: [Button]
 
+    /// The two pills of the capture, as they sit in `BarProjectPills` (in points).
+    private static let chipWidth: CGFloat = 142.5
+    private static let buildPill: (x: CGFloat, width: CGFloat) = (148.5, 90)
+    /// The strip's spacing between its items.
+    private static let spacing: CGFloat = 6
+
     var body: some View {
         ZStack(alignment: .leading) {
             Color.black
             barImage("BarFixedProject")?.resizable().frame(width: 215, height: 30)
             StripContent {
-                HStack(spacing: 0) {
-                    barImage("BarProjectPills")?.resizable().frame(width: 244.5, height: 30)
-                    if !buttons.isEmpty { ButtonCapsule(buttons: buttons) }
+                HStack(spacing: Self.spacing) {
+                    pills.frame(width: Self.chipWidth, alignment: .leading).clipped()
+                    if !buttons.isEmpty {
+                        ButtonCapsule(buttons: buttons, room: StripMetrics.contentEnd - StripMetrics.contentStart - StripMetrics.edgeFade - Self.chipWidth - Self.spacing)
+                    }
+                    pills.offset(x: -Self.buildPill.x).frame(width: Self.buildPill.width, alignment: .leading).clipped()
                 }
             }
         }
         .frame(width: TouchBarMetrics.size.width, height: TouchBarMetrics.size.height)
         .modifier(BarGlow())
     }
+
+    private var pills: some View {
+        barImage("BarProjectPills")?.resizable().frame(width: 244.5, height: 30)
+    }
 }
 
-/// The Project tab's buttons: one momentary segmented control, as the bar draws it.
+/// The Project tab's buttons: one momentary segmented control, as the bar draws it. Like the
+/// real one, buttons lose their label from the last one back when they don't fit in `room`.
 private struct ButtonCapsule: View {
     let buttons: [ProjectBar.Button]
+    let room: CGFloat
 
     var body: some View {
+        let labeled = Self.labeledCount(buttons, room: room)
         HStack(spacing: 0) {
-            ForEach(buttons, id: \.self) { button in
+            ForEach(Array(buttons.enumerated()), id: \.element) { index, button in
                 HStack(spacing: 6.5) {
                     Image(systemName: button.symbol)
                         .font(.system(size: 16))
-                    Text(button.title)
-                        .font(.system(size: 15))
-                        .fixedSize()
+                    if index < labeled {
+                        Text(button.title)
+                            .font(.system(size: 15))
+                            .fixedSize()
+                    }
                 }
-                .padding(.horizontal, 7)
+                .padding(.horizontal, index < labeled ? 7 : 0)
+                .frame(width: index < labeled ? nil : Self.iconWidth)
                 .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
-        .padding(.horizontal, 0)
         .frame(height: 30)
         .foregroundStyle(.white)
         .background(Color(red: 0x47 / 255, green: 0x46 / 255, blue: 0x46 / 255), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
         .animation(.snappy(duration: 0.45), value: buttons)
+        .animation(.snappy(duration: 0.45), value: labeled)
+    }
+
+    /// An icon-only button's width, as `ProjectStripView` sets it.
+    private static let iconWidth: CGFloat = 42
+
+    /// How many buttons, from the first, keep their label.
+    private static func labeledCount(_ buttons: [ProjectBar.Button], room: CGFloat) -> Int {
+        let font = NSFont.systemFont(ofSize: 15)
+        let widths = buttons.map { button in
+            let symbol = NSImage(systemSymbolName: button.symbol, accessibilityDescription: nil)?
+                .withSymbolConfiguration(.init(pointSize: 16, weight: .regular))?.size.width ?? 20
+            return 14 + symbol + 6.5 + (button.title as NSString).size(withAttributes: [.font: font]).width
+        }
+        var labeled = buttons.count
+        while labeled > 0, widths.prefix(labeled).reduce(0, +) + CGFloat(buttons.count - labeled) * iconWidth > room {
+            labeled -= 1
+        }
+        return labeled
     }
 }
 
